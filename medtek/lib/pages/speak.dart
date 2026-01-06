@@ -30,7 +30,7 @@ class _MedicalTriageAssistantState extends State<MedicalTriageAssistant>
   final List<Map<String, String>> _conversationHistory = [];
   String _lastBotMessage = '';
 
-  final String _ollamaEndpoint = 'http://192.168.1.117:8006/api/generate';
+  final String _ollamaEndpoint = 'http://192.168.1.102:8006/api/generate';
   final String _modelName = 'OPTGPT-4:latest';
 
   @override

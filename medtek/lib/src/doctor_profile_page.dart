@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../services/session_service.dart';
 import '../services/api_service.dart';
 import 'auth_page.dart';
+import 'doctor_verification_screen.dart';
 
 class DoctorProfilePage extends StatefulWidget {
   const DoctorProfilePage({super.key});
@@ -306,19 +307,31 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                   ],
                 ),
                 Container(height: 40, width: 1, color: Colors.white30),
-                Column(
-                  children: [
-                    Icon(
-                      verified ? Icons.verified : Icons.pending,
-                      color: Colors.white,
-                      size: 28,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      verified ? 'Verified' : 'Pending',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                  ],
+                GestureDetector(
+                  onTap: verified ? null : () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const DoctorVerificationScreen()),
+                    );
+                  },
+                  child: Column(
+                    children: [
+                      Icon(
+                        verified ? Icons.verified : Icons.gpp_bad,
+                        color: verified ? Colors.white : Colors.orangeAccent,
+                        size: 28,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        verified ? 'Verified' : 'Verify Now',
+                        style: TextStyle(
+                            color: verified ? Colors.white70 : Colors.orangeAccent,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),

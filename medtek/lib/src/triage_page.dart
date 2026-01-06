@@ -24,7 +24,7 @@ class _TriagePageState extends State<TriagePage> {
   final int _maxQuestions = 3;
   bool _reportGenerated = false;
 
-  final String _ollamaEndpoint = 'http://192.168.1.117:8006/api/generate';
+  final String _ollamaEndpoint = 'http://192.168.1.102:8006/api/generate';
   final String _modelName = 'OPTGPT-4:latest';
 
   // Voice assistant variables

@@ -58,11 +58,21 @@ class _MyActivitiesPageState extends State<MyActivitiesPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.grey[50], // Light background
       appBar: AppBar(
-        title: const Text('My Activities'),
-        backgroundColor: Colors.red,
+        title: const Text(
+          'My Activities',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0.5,
+        iconTheme: const IconThemeData(color: Colors.black),
         bottom: TabBar(
           controller: _tabController,
+          labelColor: Colors.red,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: Colors.red,
+          indicatorWeight: 3,
           tabs: const [
             Tab(icon: Icon(Icons.event_note), text: 'Appointments'),
             Tab(icon: Icon(Icons.local_taxi), text: 'Rides'),

@@ -2,381 +2,319 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:dio/dio.dart';
 import '../services/api_service.dart';
 
 class DoctorVerificationScreen extends StatefulWidget {
   const DoctorVerificationScreen({Key? key}) : super(key: key);
 
   @override
-  State<DoctorVerificationScreen> createState() =>
-      _DoctorVerificationScreenState();
+  State<DoctorVerificationScreen> createState() => _DoctorVerificationScreenState();
 }
 
 class _DoctorVerificationScreenState extends State<DoctorVerificationScreen> {
-  final _formKey = GlobalKey<FormState>();
   final _api = ApiService();
   final _picker = ImagePicker();
 
-  final licenseNumberController = TextEditingController();
-  final authorityController = TextEditingController();
-  final hospitalController = TextEditingController();
-  final notesController = TextEditingController();
+  int _currentStep = 0;
+  bool _isLoading = false;
 
-  List<File> documents = [];
-  bool _submitting = false;
-  Map<String, dynamic>? verificationStatus;
-  bool _loadingStatus = true;
+  // STEP 1: NMC
+  final _nmcController = TextEditingController();
+  bool _nmcVerified = false;
+  Map<String, dynamic>? _nmcData;
+
+  // STEP 2: OCR
+  File? _certificateImage;
+  String? _extractedText;
+  bool _ocrVerified = false;
+  int _points = 0;
+
+  // STEP 3: LIVENESS
+  File? _selfieImage;
+  bool _livenessVerified = false;
 
   @override
   void initState() {
     super.initState();
-    _loadVerificationStatus();
+    _checkStatus();
   }
 
-  Future<void> _loadVerificationStatus() async {
-    try {
-      final status = await _api.getVerificationStatus();
-      setState(() {
-        verificationStatus = status;
-        _loadingStatus = false;
-      });
-    } catch (e) {
-      setState(() => _loadingStatus = false);
-    }
+  Future<void> _checkStatus() async {
+    // Ideally fetch current progress from backend if needed
   }
 
-  // Pick multiple images from gallery
-  Future<void> _pickDocuments() async {
-    try {
-      final List<XFile> images = await _picker.pickMultiImage(
-        imageQuality: 85,
-      );
+  // --------------------------------------------------------------------------
+  // ACTIONS
+  // --------------------------------------------------------------------------
 
-      if (images.isNotEmpty) {
-        setState(() {
-          documents.addAll(images.map((xFile) => File(xFile.path)).toList());
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error picking images: $e')),
-      );
-    }
-  }
-
-  // Pick image from camera
-  Future<void> _pickFromCamera() async {
-    try {
-      final XFile? image = await _picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 85,
-      );
-
-      if (image != null) {
-        setState(() {
-          documents.add(File(image.path));
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error taking photo: $e')),
-      );
-    }
-  }
-
-  Future<void> _submitVerification() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    if (documents.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload at least one document')),
-      );
+  Future<void> _verifyNMC() async {
+    if (_nmcController.text.length < 4) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Enter valid NMC Number")));
       return;
     }
 
-    setState(() => _submitting = true);
-
+    setState(() => _isLoading = true);
     try {
-      await _api.submitDoctorVerification(
-        licenseNumber: licenseNumberController.text,
-        authority: authorityController.text,
-        hospitalAffiliation: hospitalController.text,
-        notes: notesController.text,
-        documents: documents,
-      );
+      // API CALL
+      final res = await _api.dio.post('/verification-v2/nmc', data: {
+        'doctorId': (await _api.getMe())['user']['id'],
+        'nmcNumber': _nmcController.text.trim()
+      });
 
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Verification request submitted successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      Navigator.pop(context);
+      if (res.data['success']) {
+        setState(() {
+          _nmcVerified = true;
+          _nmcData = res.data['data'];
+          _points = res.data['totalPoints'] ?? 20;
+          _currentStep = 1; // Auto advance
+        });
+      }
     } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to submit: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Verification Failed: $e")));
     } finally {
-      setState(() => _submitting = false);
+      setState(() => _isLoading = false);
     }
   }
+
+  Future<void> _pickCertificate() async {
+    final xfile = await _picker.pickImage(source: ImageSource.gallery);
+    if (xfile != null) {
+      setState(() => _certificateImage = File(xfile.path));
+    }
+  }
+
+  Future<void> _processOCR() async {
+    if (_certificateImage == null) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final userId = (await _api.getMe())['user']['id'];
+      
+      String fileName = _certificateImage!.path.split('/').last;
+      FormData formData = FormData.fromMap({
+        'doctorId': userId,
+        'document': await MultipartFile.fromFile(_certificateImage!.path, filename: fileName),
+      });
+
+      final res = await _api.dio.post('/verification-v2/ocr', data: formData);
+
+      setState(() {
+        _extractedText = res.data['extractedText'];
+        _ocrVerified = res.data['success'];
+        _points = res.data['totalPoints'] ?? (_points + 30);
+        if (_ocrVerified) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Certificate Verified!")));
+          Future.delayed(const Duration(seconds: 1), () => setState(() => _currentStep = 2));
+        } else {
+             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not read essential details. Try again.")));
+        }
+      });
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("OCR Failed: $e")));
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _takeSelfie() async {
+    final xfile = await _picker.pickImage(source: ImageSource.camera, preferredCameraDevice: CameraDevice.front);
+    if (xfile != null) {
+      setState(() => _selfieImage = File(xfile.path));
+      
+      // Auto submit liveness to simulate "Detection"
+       _verifyLiveness();
+    }
+  }
+
+  Future<void> _verifyLiveness() async {
+      if (_selfieImage == null) return;
+      setState(() => _isLoading = true);
+
+       try {
+        final userId = (await _api.getMe())['user']['id'];
+        
+        String fileName = _selfieImage!.path.split('/').last;
+        FormData formData = FormData.fromMap({
+            'doctorId': userId,
+            'live_photo': await MultipartFile.fromFile(_selfieImage!.path, filename: fileName),
+        });
+
+        final res = await _api.dio.post('/verification-v2/submit', data: formData);
+
+        setState(() {
+            _livenessVerified = true;
+            _points = res.data['totalPoints'];
+             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Liveness Verified!")));
+        });
+
+       } catch (e) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Submission Failed: $e")));
+       } finally {
+        setState(() => _isLoading = false);
+       }
+  }
+
+
+  // --------------------------------------------------------------------------
+  // UI
+  // --------------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
-    if (_loadingStatus) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Doctor Verification')),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    // If already verified
-    if (verificationStatus?['verified'] == true) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Doctor Verification')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+    return Scaffold(
+      appBar: AppBar(title: const Text("Doctor Verification")),
+      body: Stepper(
+        currentStep: _currentStep,
+        onStepTapped: (index) {
+          // Only allow tap to previous steps or next step if current is complete
+          // For simplicity, strict flow:
+          // setState(() => _currentStep = index);
+        },
+        onStepContinue: () {
+          if (_currentStep < 2) {
+             setState(() => _currentStep++);
+          } else {
+            Navigator.pop(context);
+          }
+        },
+        onStepCancel: () {
+          if (_currentStep > 0) setState(() => _currentStep--);
+        },
+        controlsBuilder: (context, details) {
+            // We hide default controls and use custom buttons inside steps
+            return const SizedBox.shrink();
+        },
+        steps: [
+          // STEP 1
+          Step(
+            title: const Text("NMC Registration"),
+            isActive: _currentStep >= 0,
+            state: _nmcVerified ? StepState.complete : StepState.indexed,
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.verified, size: 100, color: Colors.green),
-                const SizedBox(height: 20),
-                const Text(
-                  'You are verified!',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                const Text("Enter your NMC Registration Number for instant verification."),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _nmcController,
+                  decoration: const InputDecoration(
+                    labelText: "NMC Number",
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.badge),
+                  ),
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  'Verified on: ${verificationStatus?['request']?['reviewed_at'] ?? 'N/A'}',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
-    // If under review
-    if (verificationStatus?['verification_status'] == 'under_review') {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Doctor Verification')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.pending, size: 100, color: Colors.orange),
-                SizedBox(height: 20),
-                Text(
-                  'Verification Under Review',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                SizedBox(height: 10),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 32.0),
-                  child: Text(
-                    'We are reviewing your documents. This may take 24-48 hours.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey, fontSize: 16),
+                if (_nmcVerified && _nmcData != null)
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                    child: Row(children: [
+                      const Icon(Icons.check_circle, color: Colors.green),
+                      const SizedBox(width: 10),
+                      Text("Verified: ${_nmcData!['name']}"),
+                    ]),
                   ),
-                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _verifyNMC,
+                    child: _isLoading ? const CircularProgressIndicator() : const Text("Verify with NMC"),
+                  ),
+                )
               ],
             ),
           ),
-        ),
-      );
-    }
 
-    // Verification form
-    return Scaffold(
-      appBar: AppBar(title: const Text('Doctor Verification')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Submit Your Credentials',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Please provide your medical license details and upload supporting documents.',
-                style: TextStyle(color: Colors.grey),
-              ),
-              const SizedBox(height: 24),
-
-              TextFormField(
-                controller: licenseNumberController,
-                decoration: const InputDecoration(
-                  labelText: 'Medical License Number',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.badge),
-                ),
-                validator: (val) => val!.isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: authorityController,
-                decoration: const InputDecoration(
-                  labelText: 'License Issuing Authority',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.account_balance),
-                ),
-                validator: (val) => val!.isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: hospitalController,
-                decoration: const InputDecoration(
-                  labelText: 'Hospital Affiliation (Optional)',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.local_hospital),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: notesController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Additional Notes (Optional)',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              const Text(
-                'Upload Documents',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Upload medical license, degree certificates, or ID proof (images only)',
-                style: TextStyle(color: Colors.grey, fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-
-              // Document picker buttons
-              Row(
+          // STEP 2
+          Step(
+            title: const Text("Degree Certificate"),
+             isActive: _currentStep >= 1,
+            state: _ocrVerified ? StepState.complete : StepState.indexed,
+            content: Column(
                 children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _pickDocuments,
-                      icon: const Icon(Icons.photo_library),
-                      label: const Text('From Gallery'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _pickFromCamera,
-                      icon: const Icon(Icons.camera_alt),
-                      label: const Text('Take Photo'),
-                    ),
-                  ),
-                ],
-              ),
-
-              if (documents.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                const Text(
-                  'Selected Documents:',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                const SizedBox(height: 8),
-                ...documents.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final doc = entry.value;
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(
-                          doc,
-                          width: 50,
-                          height: 50,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            width: 50,
-                            height: 50,
-                            color: Colors.grey.shade300,
-                            child: const Icon(Icons.image_not_supported),
-                          ),
+                    const Text("Upload a clear photo of your MBBS/MD Degree."),
+                     const SizedBox(height: 10),
+                     GestureDetector(
+                         onTap: _pickCertificate,
+                         child: Container(
+                             height: 150,
+                             width: double.infinity,
+                             decoration: BoxDecoration(
+                                 border: Border.all(color: Colors.grey),
+                                 borderRadius: BorderRadius.circular(10),
+                                 color: Colors.grey[100]
+                             ),
+                             child: _certificateImage == null 
+                                ? const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.upload_file, size: 40), Text("Tap to Upload")])
+                                : Image.file(_certificateImage!, fit: BoxFit.cover),
+                         ),
+                     ),
+                     const SizedBox(height: 10),
+                     if (_extractedText != null)
+                      ExpansionTile(title: const Text("Extracted Text"), children: [Padding(padding: const EdgeInsets.all(8.0), child: Text(_extractedText!))]),
+                    
+                     const SizedBox(height: 20),
+                     SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                            onPressed: (_isLoading || _certificateImage == null) ? null : _processOCR,
+                             child: _isLoading ? const CircularProgressIndicator() : const Text("Scan & Verify"),
                         ),
-                      ),
-                      title: Text('Document ${index + 1}'),
-                      subtitle: Text(
-                        doc.path.split('/').last,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.close, color: Colors.red),
-                        onPressed: () {
-                          setState(() => documents.removeAt(index));
-                        },
-                      ),
-                    ),
-                  );
-                }),
-              ],
-
-              const SizedBox(height: 32),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _submitting ? null : _submitVerification,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: _submitting
-                      ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                      : const Text(
-                    'Submit for Verification',
-                    style: TextStyle(fontSize: 16),
-                  ),
-                ),
-              ),
-            ],
+                     )
+                ],
+            ),
           ),
-        ),
+
+          // STEP 3
+          Step(
+            title: const Text("Liveness Check"),
+             isActive: _currentStep >= 2,
+            state: _livenessVerified ? StepState.complete : StepState.indexed,
+            content: Column(
+                children: [
+                    const Text("Take a live selfie to confirm your identity."),
+                    const SizedBox(height: 10),
+                     GestureDetector(
+                         onTap: _takeSelfie,
+                          child: Container(
+                             height: 200,
+                             width: 200,
+                             decoration: BoxDecoration(
+                                 shape: BoxShape.circle,
+                                 border: Border.all(color: _livenessVerified ? Colors.green : Colors.grey, width: 3),
+                                  color: Colors.grey[100]
+                             ),
+                             child: _selfieImage == null 
+                                ? const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.camera_front, size: 40), Text("Take Selfie")])
+                                : ClipOval(child: Image.file(_selfieImage!, fit: BoxFit.cover)),
+                         ),
+                     ),
+                      if (_livenessVerified)
+                        const Padding(
+                          padding: EdgeInsets.all(8.0),
+                          child: Text("Liveness Verified ✅", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16)),
+                        ),
+                     const SizedBox(height: 20),
+                     if (_livenessVerified)
+                     SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                            onPressed: () {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Verification process completed!")));
+                            },
+                             child: const Text("Finish & Submit"),
+                        ),
+                     )
+                ],
+            ),
+          ),
+        ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    licenseNumberController.dispose();
-    authorityController.dispose();
-    hospitalController.dispose();
-    notesController.dispose();
-    super.dispose();
   }
 }

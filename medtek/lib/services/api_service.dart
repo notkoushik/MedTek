@@ -8,7 +8,7 @@ class ApiService {
   ApiService._internal() {
     _dio = Dio(
       BaseOptions(
-        baseUrl: 'http://192.168.1.194:4000', // ✅ Update with YOUR IP
+        baseUrl: 'http://192.168.1.102:4000', // ✅ Update with YOUR IP
         connectTimeout: const Duration(seconds: 60),
         receiveTimeout: const Duration(seconds: 60),
         sendTimeout: const Duration(seconds: 60),
