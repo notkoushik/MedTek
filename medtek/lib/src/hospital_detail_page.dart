@@ -195,15 +195,17 @@ class _HospitalDetailPageState extends State<HospitalDetailPage> {
       return;
     }
 
-    final hospitalLat =
+    double? hospitalLat =
     _toDouble(_hospital!['latitude'] ?? _hospital!['lat']);
-    final hospitalLng =
+    double? hospitalLng =
     _toDouble(_hospital!['longitude'] ?? _hospital!['lng'] ?? _hospital!['lon']);
     final hospitalName = _hospital!['name']?.toString() ?? 'Hospital';
 
     if (hospitalLat == null || hospitalLng == null) {
-      _showSnackBar('Hospital coordinates not available', isError: true);
-      return;
+      // Fallback for demo if coordinates are missing
+      hospitalLat = 17.3850;
+      hospitalLng = 78.4867;
+      _showSnackBar('Using mock location for demo (hospital coords missing)', isError: false);
     }
 
     Navigator.of(context).push(
@@ -211,8 +213,8 @@ class _HospitalDetailPageState extends State<HospitalDetailPage> {
         builder: (_) => RideBookingPage(
           pickupLat: _userPosition!.latitude,
           pickupLng: _userPosition!.longitude,
-          dropoffLat: hospitalLat,
-          dropoffLng: hospitalLng,
+          dropoffLat: hospitalLat!,
+          dropoffLng: hospitalLng!,
           hospitalName: hospitalName,
         ),
       ),

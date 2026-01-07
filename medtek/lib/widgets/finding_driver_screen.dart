@@ -37,7 +37,8 @@ class _FindingDriverScreenState extends State<FindingDriverScreen> {
     // Start auto-assign using backend
     _autoDriverService.autoAcceptRide(
       rideId: widget.rideId,
-      pickupLocation: widget.pickupLocation,
+      pickupLat: widget.pickupLocation.latitude,
+      pickupLng: widget.pickupLocation.longitude,
       mode: widget.mode,
     );
 

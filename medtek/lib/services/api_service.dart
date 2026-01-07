@@ -1,14 +1,32 @@
 // lib/services/api_service.dart
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // ✅ Add this
 import 'session_service.dart';
 import '../models/hospital.dart';
 
 class ApiService {
+  // ✅ CONFIGURATION (Dynamic)
+  static String _baseUrl = 'http://192.168.1.151:4000'; 
+  
+  static String get baseUrl => _baseUrl;
+  
+  // Helper to get the base host IP for other services (Ollama)
+  static String get host {
+     try {
+       return Uri.parse(_baseUrl).host;
+     } catch (e) {
+       return '192.168.1.151';
+     }
+  }
+
+  // Helper for Ollama endpoint
+  static String get ollamaBaseUrl => 'http://$host:8006/api/generate';
+
   ApiService._internal() {
     _dio = Dio(
       BaseOptions(
-        baseUrl: 'http://192.168.1.102:4000', // ✅ Update with YOUR IP
+        baseUrl: _baseUrl,
         connectTimeout: const Duration(seconds: 60),
         receiveTimeout: const Duration(seconds: 60),
         sendTimeout: const Duration(seconds: 60),
@@ -30,6 +48,48 @@ class ApiService {
     );
   }
 
+  // ✅ Initialize IP from Storage
+  Future<void> loadBaseUrl() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedIp = prefs.getString('backend_ip');
+      if (savedIp != null && savedIp.isNotEmpty) {
+        // Construct full URL if user just saved IP
+        String newUrl = savedIp.startsWith('http') ? savedIp : 'http://$savedIp:4000';
+        updateBaseUrl(newUrl, save: false); // Already saved
+      }
+    } catch (e) {
+      print('Error loading saved IP: $e');
+    }
+  }
+
+  // ✅ Update IP Method
+  Future<void> updateBaseUrl(String newUrl, {bool save = true}) async {
+    // Ensure URL has scheme and port
+    if (!newUrl.startsWith('http')) {
+      newUrl = 'http://$newUrl';
+    }
+    // If user enters just IP, assume port 4000
+    if (newUrl.split(':').length < 3) {
+       newUrl = '$newUrl:4000';
+    }
+
+    _baseUrl = newUrl;
+    
+    // Re-create Dio with new BaseURL
+    _dio.options.baseUrl = _baseUrl;
+
+    if (save) {
+      final prefs = await SharedPreferences.getInstance();
+      // Save just the IP part if possible, or the whole URL? 
+      // Let's save the whole URL for simplicity
+      await prefs.setString('backend_ip', _baseUrl);
+    }
+    print('✅ API Base URL updated to: $_baseUrl');
+  }
+
+
+
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
 
@@ -46,6 +106,28 @@ class ApiService {
 
   void setAuthToken(String token) {
     _dio.options.headers['Authorization'] = 'Bearer $token';
+  }
+
+  // Get appointments for a doctor (with optional date filter)
+  Future<List<Map<String, dynamic>>> getDoctorAppointments(String doctorId,
+      {DateTime? date}) async {
+    try {
+      String url = '$baseUrl/appointments?doctor_id=$doctorId';
+      if (date != null) {
+        final dateStr = date.toIso8601String().split('T').first; // YYYY-MM-DD
+        url += '&date=$dateStr';
+      }
+
+      final response = await _dio.get(url);
+      if (response.statusCode == 200) {
+        final data = response.data;
+        return (data['appointments'] as List).cast<Map<String, dynamic>>();
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching doctor appointments: $e');
+      throw Exception('Failed to load appointments');
+    }
   }
 
   // ---------- PASSWORD RESET ----------
@@ -372,6 +454,22 @@ class ApiService {
       return list.cast<Map<String, dynamic>>();
     }
 
+    if (status == 'active') {
+      // User Request: "Active" = Today's appointments (any status)
+      final now = DateTime.now();
+      final dateStr = now.toIso8601String().split('T').first;
+      
+      final res = await _dio.get(
+        '/appointments',
+        queryParameters: {'doctor_id': doctorId, 'date': dateStr},
+        options: Options(headers: {'Cache-Control': 'no-cache'}),
+      );
+      final map = res.data as Map<String, dynamic>?;
+      final list = map?['appointments'] as List<dynamic>? ?? [];
+      return list.cast<Map<String, dynamic>>();
+    }
+
+    // Default/Completed behavior
     final res = await _dio.get(
       '/appointments',
       queryParameters: {'doctor_id': doctorId},
@@ -383,6 +481,20 @@ class ApiService {
         .cast<Map<String, dynamic>>()
         .where((apt) => apt['status'] == status)
         .toList();
+  }
+
+  // Update status of a specific lab test
+  Future<bool> updateLabTestStatus(String reportId, String testName, String status) async {
+    try {
+      await _dio.patch(
+        '/medical-reports/$reportId/test-status',
+        data: {'testName': testName, 'status': status},
+      );
+      return true;
+    } catch (e) {
+      print('Error updating lab test status: $e');
+      return false;
+    }
   }
 
   Future<Map<String, dynamic>> getTrendingDoctors() async {
@@ -778,6 +890,21 @@ class ApiService {
       return [];
     } catch (e) {
       rethrow;
+    }
+  }
+
+  // ---------- AI CHAT (Gemini) ----------
+
+  Future<String> sendChatMessage(String message, List<Map<String, String>> history) async {
+    try {
+      final res = await _dio.post('/ai/chat', data: {
+        'message': message,
+        'history': history,
+      });
+      return res.data['reply']?.toString() ?? 'Sorry, I did not get a response.';
+    } catch (e) {
+      print('AI Chat Error: $e');
+      throw Exception('Failed to get AI response');
     }
   }
 }

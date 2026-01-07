@@ -317,7 +317,17 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
                     fontSize: 18,
                   ),
                 ),
-                subtitle: Text('Age: $age\nReason: $condition'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Age: $age • Gender: ${widget.patient['gender'] ?? 'N/A'}'),
+                    Text('Weight: ${widget.patient['weight'] ?? 'N/A'} kg • Height: ${widget.patient['height'] ?? 'N/A'} cm'),
+                    Text('Blood Group: ${widget.patient['blood_group'] ?? 'N/A'}'),
+                    const SizedBox(height: 4),
+                    Text('Reason: $condition', style: const TextStyle(fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                isThreeLine: true,
               ),
             ),
             const SizedBox(height: 16),

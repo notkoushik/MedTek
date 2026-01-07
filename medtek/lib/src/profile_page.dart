@@ -246,30 +246,43 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
   }
 
   Widget _buildActivitiesSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.red.shade100.withOpacity(0.10),
+            color: isDark ? Colors.black26 : Colors.red.shade100.withOpacity(0.10),
             blurRadius: 12,
+            offset: const Offset(0, 4),
           ),
         ],
+        border: isDark ? Border.all(color: Colors.white10) : null,
       ),
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
           ListTile(
-            leading: const CircleAvatar(
-              backgroundColor: Color(0xFFE3F2FD),
-              child: Icon(Icons.history, color: Colors.blue),
+            leading: CircleAvatar(
+              backgroundColor: isDark ? Colors.blue.withOpacity(0.2) : const Color(0xFFE3F2FD),
+              child: const Icon(Icons.history, color: Colors.blue),
             ),
-            title: const Text(
+            title: Text(
               'My Activities',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: colorScheme.onSurface,
+              ),
             ),
-            subtitle: const Text('Recent actions, appointments and posts'),
+            subtitle: Text(
+              'Recent actions, appointments and posts',
+              style: TextStyle(color: colorScheme.onSurfaceVariant),
+            ),
             trailing: TextButton(
               onPressed: () {
                 Navigator.pushNamed(context, '/activities');
@@ -288,7 +301,7 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
               padding: const EdgeInsets.symmetric(vertical: 12.0),
               child: Text(
                 'No recent activities.',
-                style: TextStyle(color: Colors.grey.shade600),
+                style: TextStyle(color: colorScheme.onSurfaceVariant),
               ),
             )
           else
@@ -307,14 +320,26 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
                 return ListTile(
                   dense: true,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                  leading: const Icon(Icons.circle, size: 12),
-                  title: Text(title.toString(),
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: Text(subtitle.toString(),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  leading: Icon(Icons.circle, size: 12, color: colorScheme.primary.withOpacity(0.7)),
+                  title: Text(
+                    title.toString(),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                  subtitle: Text(
+                    subtitle.toString(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: colorScheme.onSurfaceVariant),
+                  ),
                   trailing: Text(
                     dateStr,
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                    style: TextStyle(
+                      color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                      fontSize: 12,
+                    ),
                   ),
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -336,46 +361,36 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
     final userName = user?['name']?.toString() ?? 'Patient';
     final userEmail = user?['email']?.toString() ?? '';
 
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     if (_loading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFF6F6F9),
-        body: Center(child: CircularProgressIndicator()),
+      return Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F6F9),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text(
-          'Profile',
-          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.red),
-            onPressed: _signOut,
-            tooltip: 'Sign Out',
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
+    return Container(
+      color: theme.scaffoldBackgroundColor,
+      child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
         child: Column(
           children: [
             // User card with profile picture
             Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.red.shade100.withOpacity(0.18),
+                    color: isDark ? Colors.black26 : Colors.red.shade100.withOpacity(0.18),
                     spreadRadius: 1,
                     blurRadius: 9,
                   ),
                 ],
+                border: isDark ? Border.all(color: Colors.white10) : null,
               ),
               padding: const EdgeInsets.all(20),
               child: Row(
@@ -495,25 +510,26 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
                       children: [
                         Text(
                           userName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 20,
+                            color: colorScheme.onSurface,
                           ),
                         ),
                         const SizedBox(height: 5),
                         Text(
                           userEmail,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
-                            color: Colors.black54,
+                            color: colorScheme.onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(height: 5),
                         Text(
                           'Age: ${ageController.text.isEmpty ? 'N/A' : ageController.text}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
-                            color: Colors.black54,
+                            color: colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -527,33 +543,36 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
             // My Medical Reports
             Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.red.shade100.withOpacity(0.10),
+                    color: isDark ? Colors.black26 : Colors.red.shade100.withOpacity(0.10),
                     blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
                 ],
+                border: isDark ? Border.all(color: Colors.white10) : null,
               ),
               padding: const EdgeInsets.all(18),
               child: ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFFFFEBEE),
-                  child: Icon(Icons.assignment, color: Colors.red),
+                leading: CircleAvatar(
+                  backgroundColor: isDark ? Colors.red.withOpacity(0.2) : const Color(0xFFFFEBEE),
+                  child: const Icon(Icons.assignment, color: Colors.red),
                 ),
-                title: const Text(
+                title: Text(
                   'My Medical Reports',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
+                    color: colorScheme.onSurface,
                   ),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   'View prescriptions, lab tests and attached images',
-                  style: TextStyle(fontSize: 13),
+                  style: TextStyle(fontSize: 13, color: colorScheme.onSurfaceVariant),
                 ),
-                trailing: const Icon(Icons.chevron_right),
+                trailing: Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
                 onTap: () {
                   Navigator.push(
                     context,
@@ -573,28 +592,31 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
             // Profile Details
             Container(
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: colorScheme.surface,
                 borderRadius: BorderRadius.circular(18),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.red.shade100.withOpacity(0.10),
+                    color: isDark ? Colors.black26 : Colors.red.shade100.withOpacity(0.10),
                     blurRadius: 12,
+                    offset: const Offset(0, 4),
                   ),
                 ],
+                border: isDark ? Border.all(color: Colors.white10) : null,
               ),
               padding: const EdgeInsets.all(18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    children: const [
-                      Icon(Icons.person, size: 22, color: Colors.red),
-                      SizedBox(width: 8),
+                    children: [
+                      const Icon(Icons.person, size: 22, color: Colors.red),
+                      const SizedBox(width: 8),
                       Text(
                         "Profile Details",
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
+                          color: colorScheme.onSurface,
                         ),
                       ),
                     ],
@@ -603,14 +625,20 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
                   TextField(
                     controller: ageController,
                     keyboardType: TextInputType.number,
+                    style: TextStyle(color: colorScheme.onSurface),
                     decoration: InputDecoration(
                       prefixIcon: Icon(
                         Icons.calendar_today,
                         color: Colors.red.shade400,
                       ),
                       labelText: "Age",
+                      labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade400),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
@@ -633,10 +661,16 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
                       Expanded(
                         child: TextField(
                           controller: insuranceController,
+                          style: TextStyle(color: colorScheme.onSurface),
                           decoration: InputDecoration(
                             hintText: "Add insurance/no.",
+                            hintStyle: TextStyle(color: colorScheme.onSurfaceVariant.withOpacity(0.5)),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade400),
                             ),
                             isDense: true,
                           ),
@@ -665,7 +699,7 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
                           child: Text(
                             "No insurances recorded.",
                             style: TextStyle(
-                              color: Colors.grey.shade500,
+                              color: colorScheme.onSurfaceVariant.withOpacity(0.7),
                               fontSize: 13,
                             ),
                           ),
@@ -675,8 +709,11 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
                           .map(
                             (ins) => Chip(
                           label: Text(ins),
-                          backgroundColor: Colors.red.shade50,
-                          labelStyle: const TextStyle(fontSize: 13),
+                          backgroundColor: isDark ? Colors.red.withOpacity(0.1) : Colors.red.shade50,
+                          labelStyle: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? Colors.white : Colors.black87,
+                          ),
                           deleteIcon: const Icon(
                             Icons.close,
                             size: 16,
@@ -701,8 +738,11 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
                       );
                     },
                     icon: const Icon(Icons.upload_file),
-                    label:
-                    const Text('Upload insurance documents / find policy'),
+                    label: const Text('Upload insurance documents / find policy'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: colorScheme.primary,
+                      side: BorderSide(color: colorScheme.primary),
+                    ),
                   ),
                 ],
               ),
@@ -716,6 +756,7 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red.shade400,
+                  foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),

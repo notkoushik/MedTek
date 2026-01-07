@@ -7,6 +7,8 @@ import '../services/api_service.dart';
 import 'patient_detail_page.dart';
 import 'patients_list_page.dart';
 import 'doctor_profile_page.dart';
+import 'doctor_schedule_page.dart';
+import 'patient_monitor_page.dart';
 
 class DoctorDashboard extends StatefulWidget {
   const DoctorDashboard({super.key});
@@ -77,8 +79,14 @@ class DoctorPatientDashboard extends StatelessWidget {
                     color: Colors.green,
                     icon: Icons.people,
                     future: api.getDoctorSummary(doctorId),
-                    extractor: (m) =>
-                    m['todaysPatients'] as int? ?? 0,
+                    extractor: (m) => m['todaysPatients'] as int? ?? 0,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const PatientsListPage(initialIndex: 0), // Active
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -88,8 +96,14 @@ class DoctorPatientDashboard extends StatelessWidget {
                     color: Colors.orange,
                     icon: Icons.pending_actions,
                     future: api.getDoctorSummary(doctorId),
-                    extractor: (m) =>
-                    m['pendingReports'] as int? ?? 0,
+                    extractor: (m) => m['pendingReports'] as int? ?? 0,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const PatientsListPage(initialIndex: 1), // Pending
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -99,8 +113,14 @@ class DoctorPatientDashboard extends StatelessWidget {
                     color: Colors.purple,
                     icon: Icons.biotech,
                     future: api.getDoctorSummary(doctorId),
-                    extractor: (m) =>
-                    m['labTestsOrdered'] as int? ?? 0,
+                    extractor: (m) => m['labTestsOrdered'] as int? ?? 0,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const PatientsListPage(initialIndex: 2), // Completed/Labs
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -140,7 +160,14 @@ class DoctorPatientDashboard extends StatelessWidget {
                     label: 'Schedule',
                     icon: Icons.calendar_today,
                     color: Colors.red,
-                    onTap: () {},
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DoctorSchedulePage(),
+                        ),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -196,6 +223,7 @@ class _StatCard extends StatelessWidget {
   final IconData icon;
   final Future<Map<String, dynamic>> future;
   final int Function(Map<String, dynamic>) extractor;
+  final VoidCallback onTap;
 
   const _StatCard({
     required this.title,
@@ -203,6 +231,7 @@ class _StatCard extends StatelessWidget {
     required this.icon,
     required this.future,
     required this.extractor,
+    required this.onTap,
   });
 
   @override
@@ -213,32 +242,36 @@ class _StatCard extends StatelessWidget {
         final value = snapshot.hasData ? extractor(snapshot.data!) : 0;
         return Card(
           elevation: 2,
+          clipBehavior: Clip.antiAlias,
           shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Icon(icon, color: color, size: 32),
-                const SizedBox(height: 8),
-                Text(
-                  value.toString(),
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: color,
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Icon(icon, color: color, size: 32),
+                  const SizedBox(height: 8),
+                  Text(
+                    value.toString(),
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade600,
+                  const SizedBox(height: 4),
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -362,10 +395,19 @@ class _RecentPatientsList extends StatelessWidget {
         return Column(
           children: docs.map((data) {
             final patient = {
+              'id': data['patient_id']?.toString() ?? '',
+              'appointment_id': data['appointment_id']?.toString() ?? '',
               'name': (data['patient_name'] ?? 'Unknown').toString(),
               'age': (data['patient_age'] ?? 'N/A').toString(),
               'condition': (data['condition'] ?? 'N/A').toString(),
+              'lab_tests': (data['lab_tests'] ?? '').toString(),
+              'lab_tests_json': data['lab_tests_json'], // Keep as dynamic (Map)
+              'weight': (data['weight'] ?? 'N/A').toString(),
+              'height': (data['height'] ?? 'N/A').toString(),
+              'gender': (data['gender'] ?? 'N/A').toString(),
+              'blood_group': (data['blood_group'] ?? 'N/A').toString(),
             };
+            final labTests = (data['lab_tests'] ?? '').toString();
             final createdAt = data['created_at']?.toString() ?? '';
             final timeLabel = createdAt.isNotEmpty
                 ? createdAt.replaceFirst('T', ' ').split('.').first
@@ -395,8 +437,24 @@ class _RecentPatientsList extends StatelessWidget {
                   patient['name']!,
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
-                subtitle: Text(
-                    'Age: ${patient['age']} • ${patient['condition']}'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Age: ${patient['age']} • ${patient['condition']}'),
+                    if (labTests.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Ordered: $labTests',
+                          style: TextStyle(
+                            color: Colors.purple.shade700,
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
                 trailing: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -414,7 +472,11 @@ class _RecentPatientsList extends StatelessWidget {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) =>
-                          PatientDetailPage(patient: patient),
+                          PatientMonitorPage(patient: {
+                              ...patient,
+                              'lab_tests': labTests,
+                              'created_at': createdAt,
+                          }),
                     ),
                   );
                 },

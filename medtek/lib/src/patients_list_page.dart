@@ -6,7 +6,8 @@ import '../services/api_service.dart';
 import 'patient_detail_page.dart';
 
 class PatientsListPage extends StatefulWidget {
-  const PatientsListPage({super.key});
+  final int initialIndex;
+  const PatientsListPage({super.key, this.initialIndex = 0});
 
   @override
   State<PatientsListPage> createState() => _PatientsListPageState();
@@ -25,7 +26,11 @@ class _PatientsListPageState extends State<PatientsListPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(
+      length: 3, 
+      vsync: this, 
+      initialIndex: widget.initialIndex
+    );
     _api = ApiService();
   }
 

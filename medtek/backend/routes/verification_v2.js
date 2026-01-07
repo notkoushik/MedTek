@@ -5,6 +5,7 @@ const path = require('path');
 const Tesseract = require('tesseract.js');
 const fs = require('fs');
 const multer = require('multer');
+const { resolveDoctorId } = require('../utils/doctorUtils');
 
 // Configure multer for file uploads
 const storage = multer.diskStorage({
@@ -61,35 +62,54 @@ async function updateVerificationStep(doctorId, step, data, pointsToAdd) {
 router.post('/nmc', async (req, res) => {
     try {
         const { doctorId, nmcNumber } = req.body;
-        console.log(`🔍 Verifying NMC: ${nmcNumber} for Doctor ${doctorId}`);
+        console.log(`🔍 Verifying NMC: ${nmcNumber} for Doctor (Input ID: ${doctorId})`);
 
         if (!nmcNumber || nmcNumber.length < 4) {
             return res.status(400).json({ error: 'Invalid NMC Number' });
         }
 
-        // --- MOCK LOGIC ---
+        // 1. Resolve Doctor ID
+        const finalDoctorId = await resolveDoctorId(pool, doctorId);
+        if (!finalDoctorId) {
+            console.error(`❌ Doctor not found for ID: ${doctorId}`);
+            return res.status(404).json({ error: 'Doctor not found' });
+        }
+
+        // 2. Pre-coded NMC Registry (Mock)
+        const validRegistry = ['555666', '123456', '999888'];
+
         // Simulate API delay
         await new Promise(r => setTimeout(r, 1500));
 
-        // Always succeed for POC
-        const mockResult = {
-            verified: true,
-            name: "Dr. Mock Name", // In real app, this would come from scraper
-            registration_date: "2020-01-15",
-            status: "Active"
-        };
+        if (validRegistry.includes(nmcNumber)) {
+            // SUCCESS CASE
+            const mockResult = {
+                verified: true,
+                name: "Dr. Mock Name",
+                registration_date: "2020-01-15",
+                status: "Active"
+            };
 
-        const { currentPoints } = await updateVerificationStep(doctorId, 'nmc', mockResult, 20);
+            const { currentPoints } = await updateVerificationStep(finalDoctorId, 'nmc', mockResult, 20);
 
-        // Save NMC number
-        await pool.query('UPDATE doctors SET nmc_number = $1 WHERE id = $2', [nmcNumber, doctorId]);
+            // Save NMC number
+            await pool.query('UPDATE doctors SET nmc_number = $1 WHERE id = $2', [nmcNumber, finalDoctorId]);
 
-        res.json({
-            success: true,
-            message: 'NMC Verification Successful',
-            data: mockResult,
-            totalPoints: currentPoints
-        });
+            res.json({
+                success: true,
+                message: 'NMC Verification Successful',
+                data: mockResult,
+                totalPoints: currentPoints
+            });
+        } else {
+            // FAILURE CASE
+            return res.json({
+                success: false,
+                message: 'NMC Number not found in registry. Try: 555666',
+                data: null,
+                totalPoints: 0
+            });
+        }
 
     } catch (e) {
         console.error('❌ NMC Error:', e);
@@ -139,7 +159,11 @@ router.post('/ocr', upload.single('document'), async (req, res) => {
         // 30 Points if passed
         const points = passed ? 30 : 0;
 
-        const { currentPoints } = await updateVerificationStep(doctorId, 'ocr', verificationData, points);
+        // Resolve Doctor ID
+        const finalDoctorId = await resolveDoctorId(pool, doctorId);
+        if (!finalDoctorId) return res.status(404).json({ error: 'Doctor not found' });
+
+        const { currentPoints } = await updateVerificationStep(finalDoctorId, 'ocr', verificationData, points);
 
         res.json({
             success: passed,
@@ -174,8 +198,12 @@ router.post('/submit', upload.single('live_photo'), async (req, res) => {
             photo: file ? file.path : null
         };
 
+        // Resolve Doctor ID
+        const finalDoctorId = await resolveDoctorId(pool, doctorId);
+        if (!finalDoctorId) return res.status(404).json({ error: 'Doctor not found' });
+
         // 15 Points
-        const { currentPoints } = await updateVerificationStep(doctorId, 'liveness', livenessData, 15);
+        const { currentPoints } = await updateVerificationStep(finalDoctorId, 'liveness', livenessData, 15);
 
         // Final Check
         let finalStatus = 'rejected';
@@ -184,7 +212,7 @@ router.post('/submit', upload.single('live_photo'), async (req, res) => {
 
         await pool.query(
             'UPDATE doctors SET verified = $1 WHERE id = $2',
-            [finalStatus === 'verified', doctorId]
+            [finalStatus === 'verified', finalDoctorId]
         );
 
         res.json({
@@ -204,9 +232,12 @@ router.post('/submit', upload.single('live_photo'), async (req, res) => {
 router.get('/status/:doctorId', async (req, res) => {
     try {
         const { doctorId } = req.params;
+        const finalDoctorId = await resolveDoctorId(pool, doctorId);
+        if (!finalDoctorId) return res.status(404).json({ error: 'Doctor not found' });
+
         const result = await pool.query(
             'SELECT verification_details, verification_points, verified, nmc_number FROM doctors WHERE id = $1',
-            [doctorId]
+            [finalDoctorId]
         );
 
         if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });

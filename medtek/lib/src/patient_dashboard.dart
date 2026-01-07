@@ -1,6 +1,7 @@
-// lib/src/home_page.dart (Patient Dashboard, Postgres/REST)
+// lib/src/patient_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../main.dart'; // Import for ThemeNotifier
 import 'auth_page.dart';
 import '../services/api_service.dart';
 import '../services/session_service.dart';
@@ -25,8 +26,6 @@ class _PatientDashboardState extends State<PatientDashboard> {
   List<Map<String, dynamic>> trendingHospitals = [];
   bool isLoadingDoctors = true;
   bool isLoadingHospitals = true;
-
-  bool _isDarkMode = false;
 
   @override
   void initState() {
@@ -157,6 +156,10 @@ class _PatientDashboardState extends State<PatientDashboard> {
     final displayName =
         user?['name']?.toString() ?? user?['email']?.toString() ?? 'User';
 
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return RefreshIndicator(
       onRefresh: () async {
         await _fetchTrendingDoctors();
@@ -178,12 +181,13 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 padding:
                 const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(
+                      color: isDark ? Colors.transparent : Colors.grey.shade300),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.grey.shade200,
+                      color: Colors.black.withOpacity(0.05),
                       blurRadius: 8,
                       offset: const Offset(0, 2),
                     ),
@@ -191,16 +195,16 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.search, color: Colors.red, size: 24),
+                    Icon(Icons.search, color: colorScheme.primary, size: 24),
                     const SizedBox(width: 16),
                     Expanded(
                       child: Text(
                         'Search hospitals...',
                         style: TextStyle(
-                            fontSize: 16, color: Colors.grey.shade600),
+                            fontSize: 16, color: colorScheme.onSurfaceVariant),
                       ),
                     ),
-                    const Icon(Icons.tune, color: Colors.red, size: 20),
+                    Icon(Icons.tune, color: colorScheme.primary, size: 20),
                   ],
                 ),
               ),
@@ -260,12 +264,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
                     child: Column(
                       children: [
                         Icon(Icons.person_off_outlined,
-                            size: 48, color: Colors.grey.shade400),
+                            size: 48, color: colorScheme.onSurface.withOpacity(0.4)),
                         const SizedBox(height: 12),
                         Text(
                           'No doctors available',
                           style: TextStyle(
-                              fontSize: 16, color: Colors.grey.shade600),
+                              fontSize: 16, color: colorScheme.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -338,12 +342,12 @@ class _PatientDashboardState extends State<PatientDashboard> {
                     child: Column(
                       children: [
                         Icon(Icons.domain_disabled_outlined,
-                            size: 48, color: Colors.grey.shade400),
+                            size: 48, color: colorScheme.onSurface.withOpacity(0.4)),
                         const SizedBox(height: 12),
                         Text(
                           'No hospitals available',
                           style: TextStyle(
-                              fontSize: 16, color: Colors.grey.shade600),
+                              fontSize: 16, color: colorScheme.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -373,17 +377,21 @@ class _PatientDashboardState extends State<PatientDashboard> {
     final userName = user?['name']?.toString() ?? 'User';
     final profilePic = user?['profile_picture']?.toString();
 
+    // Access ThemeNotifier
+    final themeNotifier = Provider.of<ThemeNotifier>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     // Page titles - show profile picture for Home tab
     Widget getAppBarTitle(int index) {
       if (index == 0) {
         // Home tab - show profile picture
         return GestureDetector(
           onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const PatientProfilePage(),
-              ),
+            setState(() => _selectedIndex = 2);
+            _pageController.animateToPage(
+              2,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
             );
           },
           child: Row(
@@ -394,7 +402,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
                 height: 36,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.red, width: 2),
+                  border: Border.all(color: Theme.of(context).primaryColor, width: 2),
                 ),
                 child: ClipOval(
                   child: profilePic != null && profilePic.isNotEmpty
@@ -405,7 +413,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
                       color: Colors.red.shade200,
                       child: Center(
                         child: Text(
-                          userName[0].toUpperCase(),
+                          userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
                           style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
@@ -419,7 +427,7 @@ class _PatientDashboardState extends State<PatientDashboard> {
                     color: Colors.red.shade200,
                     child: Center(
                       child: Text(
-                        userName[0].toUpperCase(),
+                        userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -447,12 +455,16 @@ class _PatientDashboardState extends State<PatientDashboard> {
         title: getAppBarTitle(_selectedIndex),
         actions: [
           IconButton(
-            icon: Icon(_isDarkMode ? Icons.light_mode : Icons.dark_mode),
+            icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
             tooltip: 'Toggle theme',
             onPressed: () {
-              setState(() {
-                _isDarkMode = !_isDarkMode;
-              });
+              // Toggle logic: If dark, go light. If light, go dark.
+              // This overrides the system setting until the user manually changes it back or data is cleared.
+              if (isDark) {
+                themeNotifier.setMode(ThemeMode.light);
+              } else {
+                themeNotifier.setMode(ThemeMode.dark);
+              }
             },
           ),
           IconButton(

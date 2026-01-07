@@ -178,6 +178,10 @@ router.get('/:id/profile', auth, async (req, res) => {
          u.role,
          u.profile_picture,
          pp.age,
+         pp.weight,
+         pp.height,
+         pp.gender,
+         pp.blood_group,
          pp.reference_notes,
          pp.insurances,
          pd.doctor_id,
@@ -205,17 +209,30 @@ router.get('/:id/profile', auth, async (req, res) => {
 router.patch('/:id/profile', auth, async (req, res) => {
   try {
     const userId = req.params.id;
-    const { age, references, insurances } = req.body;
+    const { age, weight, height, gender, blood_group, references, insurances } = req.body;
 
     await pool.query(
-      `INSERT INTO patient_profiles (user_id, age, reference_notes, insurances)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO patient_profiles (user_id, age, weight, height, gender, blood_group, reference_notes, insurances)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (user_id)
        DO UPDATE SET
-         age = EXCLUDED.age,
-         reference_notes = EXCLUDED.reference_notes,
-         insurances = EXCLUDED.insurances`,
-      [userId, age || 0, JSON.stringify(references || []), JSON.stringify(insurances || [])]
+         age = COALESCE(EXCLUDED.age, patient_profiles.age),
+         weight = COALESCE(EXCLUDED.weight, patient_profiles.weight),
+         height = COALESCE(EXCLUDED.height, patient_profiles.height),
+         gender = COALESCE(EXCLUDED.gender, patient_profiles.gender),
+         blood_group = COALESCE(EXCLUDED.blood_group, patient_profiles.blood_group),
+         reference_notes = COALESCE(EXCLUDED.reference_notes, patient_profiles.reference_notes),
+         insurances = COALESCE(EXCLUDED.insurances, patient_profiles.insurances)`,
+      [
+        userId,
+        age || null,
+        weight || null,
+        height || null,
+        gender || null,
+        blood_group || null,
+        references ? JSON.stringify(references) : null,
+        insurances ? JSON.stringify(insurances) : null
+      ]
     );
 
     res.json({ success: true, message: 'Profile updated' });

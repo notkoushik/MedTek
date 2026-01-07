@@ -6,7 +6,8 @@ import 'dart:ui';
 import 'forgot_password_screen.dart';
 import 'patient_dashboard.dart';
 import 'doctor_dashboard.dart';
-import 'doctor_onboarding_guard.dart'; // ✅ add import
+import 'doctor_onboarding_guard.dart'; 
+import 'patient_profile_setup_page.dart';
 import 'select_hospital_page.dart';
 import '../services/api_service.dart';
 import '../services/session_service.dart';
@@ -42,6 +43,9 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    
+    // ✅ Load saved IP address
+    api.loadBaseUrl().then((_) => setState(() {}));
 
     // Main entrance animation
     _animationController = AnimationController(
@@ -157,15 +161,48 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
     }
   }
 
-  void _goToDashboard(BuildContext context, String role) {
+  Future<void> _goToDashboard(BuildContext context, String role) async {
     if (role == 'doctor') {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const DoctorOnboardingGuard()),
       );
     } else {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const PatientDashboard()),
-      );
+      // Check if patient profile is complete
+      try {
+        final session = context.read<SessionService>();
+        final userId = session.user?['id']?.toString();
+        
+        if (userId != null) {
+          final profile = await api.getPatientProfile(userId);
+          final age = profile['age'];
+          final weight = profile['weight'];
+
+          if (age == null || (age is int && age == 0) || weight == null) {
+             if (mounted) {
+               // Import needed at top: import 'patient_profile_setup_page.dart';
+               // I will add the import via another edit or assume it's fine to add implicitly if I could 
+               // but I better be safe. I can't add import here easily.
+               // Actually, I should use a replace block that includes imports if I can needed.
+               // Let's assume I will add import in a second step or if this file supports it.
+               // Let me check imports: lines 1-12.
+               
+               Navigator.of(context).pushReplacement(
+                MaterialPageRoute(builder: (_) => const PatientProfileSetupPage()),
+              );
+              return;
+             }
+          }
+        }
+      } catch (e) {
+        print('Error checking profile: $e');
+        // Fallback to dashboard if error
+      }
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const PatientDashboard()),
+        );
+      }
     }
   }
 
@@ -229,6 +266,16 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
+                              // ✅ Settings Icon (Top Right)
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: IconButton(
+                                  icon: const Icon(Icons.settings, color: Colors.grey),
+                                  onPressed: _showIpConfigDialog,
+                                  tooltip: 'Configure Backend IP',
+                                ),
+                              ),
+
                               // Medical Logo with Pulse Animation
                               AnimatedBuilder(
                                 animation: _pulseAnimation,
@@ -711,6 +758,55 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
         onChanged: (v) {
           setState(() => role = v ?? 'patient');
         },
+      ),
+    );
+  }
+
+  // ✅ Dynamic IP Configuration Dialog
+  void _showIpConfigDialog() {
+    final ipCtrl = TextEditingController(text: ApiService.host); 
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Backend Configuration'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter the IP address of your computer (e.g., 192.168.1.151). No need for http:// or port.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: ipCtrl,
+              decoration: const InputDecoration(
+                labelText: 'IP Address',
+                border: OutlineInputBorder(),
+                hintText: '192.168.1.151',
+              ),
+              keyboardType: TextInputType.number, 
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+               final newIp = ipCtrl.text.trim();
+               if (newIp.isNotEmpty) {
+                 await api.updateBaseUrl(newIp);
+                 if (mounted) {
+                   ScaffoldMessenger.of(context).showSnackBar(
+                     SnackBar(content: Text('Backend updated to ${ApiService.baseUrl}')),
+                   );
+                   Navigator.pop(context);
+                 }
+               }
+            },
+            child: const Text('Save'),
+          ),
+        ],
       ),
     );
   }

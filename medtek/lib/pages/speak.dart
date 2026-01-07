@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../services/api_service.dart';
 
 class MedicalTriageAssistant extends StatefulWidget {
   const MedicalTriageAssistant({Key? key}) : super(key: key);
@@ -30,7 +31,7 @@ class _MedicalTriageAssistantState extends State<MedicalTriageAssistant>
   final List<Map<String, String>> _conversationHistory = [];
   String _lastBotMessage = '';
 
-  final String _ollamaEndpoint = 'http://192.168.1.102:8006/api/generate';
+  String get _ollamaEndpoint => ApiService.ollamaBaseUrl;
   final String _modelName = 'OPTGPT-4:latest';
 
   @override

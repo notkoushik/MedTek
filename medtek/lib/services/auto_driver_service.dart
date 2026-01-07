@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:math';
 
-import 'package:google_maps_flutter/google_maps_flutter.dart';
-
 import '../models/transport_mode.dart';
 import 'api_service.dart';
 
@@ -23,7 +21,8 @@ class AutoDriverService {
 
   // Generate a random driver near the pickup location
   Map<String, dynamic> _generateNearbyDriver(
-      LatLng pickupLocation,
+      double pickupLat,
+      double pickupLng,
       TransportMode mode,
       ) {
     final random = Random();
@@ -32,8 +31,8 @@ class AutoDriverService {
     final latOffset = (random.nextDouble() - 0.5) * 0.02; // ~2km
     final lngOffset = (random.nextDouble() - 0.5) * 0.02;
 
-    final driverLat = pickupLocation.latitude + latOffset;
-    final driverLng = pickupLocation.longitude + lngOffset;
+    final driverLat = pickupLat + latOffset;
+    final driverLng = pickupLng + lngOffset;
 
     return {
       'name': _driverNames[random.nextInt(_driverNames.length)],
@@ -50,13 +49,10 @@ class AutoDriverService {
   }
 
   /// Auto-accept ride after 10 seconds using Postgres backend.
-  ///
-  /// Assumes backend has:
-  /// - GET /rides/:id           -> { ride: {...} }
-  /// - POST /rides/:id/assign   -> body { driverName, driverPhone, ... }
   Future<void> autoAcceptRide({
     required String rideId,
-    required LatLng pickupLocation,
+    required double pickupLat,
+    required double pickupLng,
     required TransportMode mode,
   }) async {
     print('⏰ Starting auto-accept timer for ride: $rideId');
@@ -78,7 +74,7 @@ class AutoDriverService {
       }
 
       // 2) Generate automated driver
-      final driver = _generateNearbyDriver(pickupLocation, mode);
+      final driver = _generateNearbyDriver(pickupLat, pickupLng, mode);
 
       // 3) Call backend to assign driver and update ride status
       await _api.assignDriver(rideId, driver);

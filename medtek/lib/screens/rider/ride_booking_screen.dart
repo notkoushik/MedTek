@@ -7,6 +7,8 @@ import 'package:medtek/services/api_service.dart';
 import 'ride_tracking_screen.dart';
 import 'package:provider/provider.dart';
 import '../../services/session_service.dart';
+import '../../services/auto_driver_service.dart';
+import '../../models/transport_mode.dart';
 
 class RideBookingPage extends StatefulWidget {
   final double pickupLat;
@@ -97,6 +99,14 @@ class _RideBookingPageState extends State<RideBookingPage> {
     );
 
     final rideId = res['ride']['id'].toString();
+
+    // Start auto-driver simulation
+    AutoDriverService().autoAcceptRide(
+      rideId: rideId,
+      pickupLat: widget.pickupLat,
+      pickupLng: widget.pickupLng,
+      mode: TransportMode.auto, // Default to Auto for now
+    );
 
     if (!mounted) return;
     Navigator.pushReplacement(

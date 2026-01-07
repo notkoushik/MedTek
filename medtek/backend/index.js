@@ -16,11 +16,19 @@ const medicalReportsRouter = require('./routes/medical-reports');
 
 const app = express();
 
+// ✅ Health Check (Top Priority)
+app.get('/', (req, res) => {
+  console.log('💓 Health check ping received');
+  res.send('✅ MedTek API is running!');
+});
+
 // ---------- GLOBAL MIDDLEWARE (MUST BE IN THIS ORDER) ----------
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); // ✅ Increase limit
 app.use(express.urlencoded({ extended: true, limit: '50mb' })); // ✅ Add this
 app.use('/uploads', express.static('uploads'));
+
+// ✅ Health Check Route (Moved to top)
 
 // Simple query helper
 async function query(text, params) {
@@ -339,13 +347,21 @@ app.use('/verification', require('./routes/verification'));
 app.use('/verification-v2', require('./routes/verification_v2')); // ✅ NEW POC ROUTE 
 app.use('/doctors', doctorsRoutes);
 app.use('/activities', require('./routes/activities')); // ✅ NEW ACTIVITIES ROUTE
+app.use('/ai', require('./routes/ai')); // ✅ NEW AI ROUTE (Gemini)
 app.use('/medical-reports', authMiddleware, medicalReportsRouter);
 
 // ---------- SERVER BOOT ----------
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`✅ API running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
+
+  if (process.env.GEMINI_API_KEY) {
+    const key = process.env.GEMINI_API_KEY;
+    console.log(`🔑 Gemini API Key loaded: ${key.substring(0, 8)}... (Length: ${key.length})`);
+  } else {
+    console.log('❌ GEMINI_API_KEY is MISSING in .env');
+  }
   console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('📋 Available endpoints:');
   console.log('   POST /auth/register');

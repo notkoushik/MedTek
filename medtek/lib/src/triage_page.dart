@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
+import '../services/api_service.dart';
 import 'hospital_selection_page.dart';
 
 class TriagePage extends StatefulWidget {
@@ -24,7 +25,8 @@ class _TriagePageState extends State<TriagePage> {
   final int _maxQuestions = 3;
   bool _reportGenerated = false;
 
-  final String _ollamaEndpoint = 'http://192.168.1.102:8006/api/generate';
+  // Use dynamic endpoint from ApiService
+  String get _ollamaEndpoint => ApiService.ollamaBaseUrl;
   final String _modelName = 'OPTGPT-4:latest';
 
   // Voice assistant variables
@@ -222,89 +224,54 @@ class _TriagePageState extends State<TriagePage> {
     _scrollToBottom();
 
     try {
-      // Build conversation history (last 6 messages)
-      final recentMessages = _messages.length > 6
-          ? _messages.sublist(_messages.length - 6)
-          : _messages;
+      // ✅ Build context for API (Gemini)
+      final List<Map<String, String>> history = _messages.map((m) {
+        return {
+          'role': m.isUser ? 'user' : 'bot', 
+          'content': m.text
+        };
+      }).toList();
 
-      final conversation = recentMessages
-          .map((m) => '${m.isUser ? "Patient" : "Doctor"}: ${m.text}')
-          .join('\n');
-
-      String prompt;
+      String prompt = userMessage;
+      
+      // If closing conversation, append instruction
       if (_questionCount >= _maxQuestions) {
-        // Generate report
-        prompt = '''You are a medical triage assistant. Based on this conversation, provide a brief medical report (2-3 sentences) with:
-1. Main symptoms identified
-2. Possible condition (general assessment)
-3. Recommended specialist type
-
-Conversation:
-$conversation
-
-Medical Report:''';
-      } else {
-        // Ask follow-up question
-        prompt = '''You are a friendly medical assistant. Ask ONE specific follow-up question about the patient's symptoms. Keep it conversational and under 20 words. Only ask about medical symptoms.
-
-$conversation
-
-Doctor:''';
+        prompt += "\n\n(Generate a final medical triage report with: 1. Symptoms, 2. Possible Condition, 3. Recommended Specialist)";
       }
 
-      final body = jsonEncode({
-        'model': _modelName,
-        'prompt': prompt,
-        'max_tokens': _questionCount >= _maxQuestions ? 200 : 100,
-        'temperature': 0.7,
-        'stream': false,
-        'stop': ['\n\n', 'Patient:'],
-      });
+      // ✅ Use Backend API (Gemini)
+      final reply = await ApiService().sendChatMessage(prompt, history);
 
-      final resp = await http.post(
-        Uri.parse(_ollamaEndpoint),
-        headers: {'Content-Type': 'application/json'},
-        body: body,
-      ).timeout(const Duration(seconds: 20));
+      if (mounted) {
+        setState(() {
+          _messages.add(ChatMessage(
+            text: reply,
+            isUser: false,
+            timestamp: DateTime.now(),
+          ));
+          _isTyping = false;
+        });
+        
+        _speak(reply);
+        _scrollToBottom();
 
-      String reply = '';
-      if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body);
-        reply = (data['response'] ?? data['text'] ?? '').toString().trim();
-        reply = _cleanResponse(reply);
-      } else {
-        reply = "Sorry, I'm having trouble. Could you repeat that?";
-      }
-
-      setState(() {
-        _messages.add(ChatMessage(
-          text: reply,
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
-        _isTyping = false;
-
+        // If this was the final report, show button
         if (_questionCount >= _maxQuestions) {
-          _reportGenerated = true;
+            setState(() => _reportGenerated = true);
         }
-      });
-
-      _scrollToBottom();
-
-      // Auto-speak the assistant's response
-      await _speak(reply);
-
+      }
     } catch (e) {
-      setState(() {
-        _messages.add(ChatMessage(
-          text: "Network error. Please check your connection and try again.",
-          isUser: false,
-          timestamp: DateTime.now(),
-          isError: true,
-        ));
-        _isTyping = false;
-      });
-      await _speak("Network error. Please check your connection.");
+      print('Chat Error: $e');
+      if (mounted) {
+        setState(() {
+          _messages.add(ChatMessage(
+            text: "I'm having trouble connecting to the brain. Please try again.",
+            isUser: false,
+            timestamp: DateTime.now(),
+          ));
+          _isTyping = false;
+        });
+      }
     }
   }
 

@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const auth = require('../middleware/auth');
+const { resolveDoctorId } = require('../utils/doctorUtils');
 
 // ✅ GET /doctors/my-hospital - MUST be BEFORE /:id routes
 router.get('/my-hospital', auth, async (req, res) => {
@@ -30,9 +31,9 @@ router.get('/my-hospital', auth, async (req, res) => {
 
     console.log(`✅ Doctor ${doctorId} has hospital: ${result.rows[0].name}`);
 
-    res.json({ 
+    res.json({
       success: true,
-      hospital: result.rows[0] 
+      hospital: result.rows[0]
     });
   } catch (e) {
     console.error('GET /doctors/my-hospital error', e);
@@ -73,7 +74,7 @@ router.get('/trending', async (req, res) => {
 router.get('/search', async (req, res) => {
   try {
     const { query } = req.query;
-    
+
     let result;
     if (query) {
       result = await pool.query(
@@ -192,8 +193,8 @@ router.post('/select-hospital', auth, async (req, res) => {
 
     console.log('✅ Returning hospital data:', hospitalData.rows[0]);
 
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       hospitalId,
       hospital: hospitalData.rows[0] // ✅ Return full hospital object
     });
@@ -265,7 +266,7 @@ router.patch('/profile', auth, async (req, res) => {
       email: doctor.email,
       role: doctor.role,
       profile_picture: doctor.profile_picture,
-      profile_picture_url: doctor.profile_picture 
+      profile_picture_url: doctor.profile_picture
         ? `/uploads/profile-pictures/${doctor.profile_picture}`
         : null,
       specialization: doctor.specialization,
@@ -286,8 +287,8 @@ router.patch('/profile', auth, async (req, res) => {
 
     console.log('✅ Returning updated user:', response);
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       user: response  // ✅ Return as 'user'
     });
   } catch (e) {
@@ -298,6 +299,105 @@ router.patch('/profile', auth, async (req, res) => {
 
 // ... rest of your routes below
 
+
+// ✅ GET /doctors/:id/summary
+router.get('/:id/summary', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1. Resolve Doctor ID (Handle "Is it User ID or Doctor ID?")
+    let doctorId = id;
+    const docCheck = await pool.query('SELECT id FROM doctors WHERE id = $1', [id]);
+    if (docCheck.rows.length === 0) {
+      const userDocCheck = await pool.query('SELECT id FROM doctors WHERE user_id = $1', [id]);
+      if (userDocCheck.rows.length > 0) {
+        doctorId = userDocCheck.rows[0].id;
+      } else {
+        return res.status(404).json({ error: 'Doctor not found' });
+      }
+    }
+
+    // 2. Run parallel queries for stats
+    const today = new Date().toISOString().split('T')[0];
+
+    // Count today's patients
+    const todayQuery = pool.query(
+      `SELECT COUNT(*) FROM appointments 
+       WHERE doctor_id = $1 AND DATE(appointment_date) = $2`,
+      [doctorId, today]
+    );
+
+    // Count pending reports
+    const pendingQuery = pool.query(
+      `SELECT COUNT(*) FROM appointments 
+       WHERE doctor_id = $1 AND status = 'pending'`,
+      [doctorId]
+    );
+
+    // Count lab tests ordered (from medical_reports)
+    const labsQuery = pool.query(
+      `SELECT SUM(lab_tests_count) as count FROM medical_reports 
+       WHERE doctor_id = $1`,
+      [parseInt(doctorId)] // Ensure integer
+    );
+
+    const [todayRes, pendingRes, labsRes] = await Promise.all([
+      todayQuery, pendingQuery, labsQuery
+    ]);
+
+    res.json({
+      todaysPatients: parseInt(todayRes.rows[0].count || 0),
+      pendingReports: parseInt(pendingRes.rows[0].count || 0),
+      labTestsOrdered: parseInt(labsRes.rows[0].count || 0)
+    });
+
+  } catch (e) {
+    console.error('GET /doctors/:id/summary error', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ✅ GET /doctors/:id/recent-reports
+router.get('/:id/recent-reports', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { limit = 5 } = req.query;
+
+    // 1. Resolve Doctor ID 
+    const doctorId = await resolveDoctorId(pool, id);
+    if (!doctorId) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    const result = await pool.query(
+      `SELECT 
+        mr.id,
+        mr.patient_id,
+        mr.patient_name,
+        pp.age AS patient_age,
+        pp.weight,
+        pp.height,
+        pp.gender,
+        pp.blood_group,
+        mr.condition,
+        mr.lab_tests,
+        mr.lab_tests_json,
+        mr.created_at
+       FROM medical_reports mr
+       LEFT JOIN patient_profiles pp ON mr.patient_id = pp.user_id
+       WHERE mr.doctor_id = $1
+       ORDER BY mr.created_at DESC
+       LIMIT $2`,
+      [doctorId, limit]
+    );
+
+    res.json({ items: result.rows });
+
+  } catch (e) {
+    console.error('GET /doctors/:id/recent-reports error', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // ✅ GET /doctors/:id/patients - Now safe to use :id
 router.get('/:id/patients', async (req, res) => {
@@ -340,7 +440,7 @@ router.post('/:id/reviews', auth, async (req, res) => {
 router.get('/:id/reviews', async (req, res) => {
   try {
     const doctorId = req.params.id;
-    
+
     const result = await pool.query(
       `SELECT 
         dr.id,
