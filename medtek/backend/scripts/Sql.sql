@@ -80,3 +80,25 @@ CREATE TABLE hospital_doctors (
   hospital_id INT REFERENCES hospitals(id) ON DELETE CASCADE,
   PRIMARY KEY (user_id, hospital_id)
 );
+-- rides table (Added for Ride Booking Feature)
+CREATE TABLE IF NOT EXISTS rides (
+  id SERIAL PRIMARY KEY,
+  rider_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  driver_id INTEGER REFERENCES users(id) ON DELETE
+  SET NULL,
+    pickup_lat DOUBLE PRECISION NOT NULL,
+    pickup_lng DOUBLE PRECISION NOT NULL,
+    drop_lat DOUBLE PRECISION NOT NULL,
+    drop_lng DOUBLE PRECISION NOT NULL,
+    distance_km DOUBLE PRECISION,
+    estimated_fare DOUBLE PRECISION,
+    status VARCHAR(20) DEFAULT 'requested',
+    -- requested, accepted, arrived, in_progress, completed, cancelled
+    pin VARCHAR(10),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    accepted_at TIMESTAMPTZ,
+    completed_at TIMESTAMPTZ,
+    driver_lat DOUBLE PRECISION,
+    driver_lng DOUBLE PRECISION
+);

@@ -14,7 +14,8 @@ class PatientProfileSetupPage extends StatefulWidget {
 class _PatientProfileSetupPageState extends State<PatientProfileSetupPage> {
   final _formKey = GlobalKey<FormState>();
   
-  final _ageController = TextEditingController();
+  final _dobController = TextEditingController(); // NEW
+  final _ageController = TextEditingController(); // Keep for API, maybe hide or make read-only
   final _weightController = TextEditingController();
   final _heightController = TextEditingController();
   String _selectedGender = 'Male';
@@ -46,15 +47,45 @@ class _PatientProfileSetupPageState extends State<PatientProfileSetupPage> {
               ),
               const SizedBox(height: 32),
 
-              // Age
+              // Date of Birth (Calculates Age)
+              _buildInputLabel('Date of Birth'),
+              TextFormField(
+                controller: _dobController,
+                readOnly: true, // Prevent manual typing
+                decoration: _inputDecoration('Select Date of Birth').copyWith(
+                  suffixIcon: const Icon(Icons.calendar_today, color: Colors.grey),
+                ),
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now().subtract(const Duration(days: 365 * 20)), // Default 20 years ago
+                    firstDate: DateTime(1900),
+                    lastDate: DateTime.now(),
+                  );
+                  if (picked != null) {
+                    setState(() {
+                      _dobController.text = "${picked.day}/${picked.month}/${picked.year}";
+                      final age = _calculateAge(picked);
+                      _ageController.text = age.toString();
+                    });
+                  }
+                },
+                validator: (val) {
+                  if (val == null || val.isEmpty) return 'Please select date of birth';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 20),
+
+              // Age (Auto-calculated, Read-only)
               _buildInputLabel('Age (Years)'),
               TextFormField(
                 controller: _ageController,
+                readOnly: true,
                 keyboardType: TextInputType.number,
-                decoration: _inputDecoration('Enter your age'),
+                decoration: _inputDecoration('Age will appear here'),
                 validator: (val) {
-                  if (val == null || val.isEmpty) return 'Please enter age';
-                  if (int.tryParse(val) == null) return 'Invalid age';
+                  if (val == null || val.isEmpty) return 'Age is required';
                   return null;
                 },
               ),
@@ -189,5 +220,14 @@ class _PatientProfileSetupPageState extends State<PatientProfileSetupPage> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  int _calculateAge(DateTime dob) {
+    final now = DateTime.now();
+    int age = now.year - dob.year;
+    if (now.month < dob.month || (now.month == dob.month && now.day < dob.day)) {
+      age--;
+    }
+    return age;
   }
 }

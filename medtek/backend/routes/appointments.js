@@ -82,14 +82,34 @@ router.get('/pending', async (req, res) => {
       return res.status(400).json({ error: 'doctor_id required' });
     }
 
+    // RESOLVE DOCTOR ID (Handle user_id vs doctor_id confusion)
+    const finalDoctorId = await resolveDoctorId(pool, doctor_id);
+    if (!finalDoctorId) {
+      // If we can't resolve it, try using the raw ID or return empty
+      console.warn(`Could not resolve doctor ID for: ${doctor_id}`);
+    }
+
+    // UPDATED QUERY:
+    // 1. Join medical_reports to check if a report exists for this appointment
+    // 2. Filter: Only show appointments where status is 'pending' 
+    //    AND (no report exists OR report status is 'awaiting_lab_results')
+    //    Actually, user wants "Pending" list to basically mean "Not seen yet".
+    //    So if a report exists, it shouldn't be here (it moves to Active/completed).
+
     const result = await pool.query(
-      `SELECT a.*, u.name AS patient_name, u.email AS patient_email
+      `SELECT a.*, 
+              u.name AS patient_name, 
+              u.email AS patient_email,
+              mr.report_status,
+              mr.id as report_id
        FROM appointments a
        LEFT JOIN users u ON a.user_id = u.id
-       LEFT JOIN doctors d ON a.doctor_id = d.id
-       WHERE (d.id = $1 OR d.user_id = $1) AND a.status = $2
+       LEFT JOIN medical_reports mr ON a.id = mr.appointment_id
+       WHERE a.doctor_id = $1 
+         AND a.status = 'pending'
+         AND mr.id IS NULL
        ORDER BY a.appointment_date ASC`,
-      [doctor_id, 'pending']
+      [finalDoctorId || doctor_id]
     );
 
     res.json({ appointments: result.rows });
@@ -116,17 +136,23 @@ router.get('/', async (req, res) => {
 
     let queryText = `
     SELECT
-    a.*,
+      a.*,
       u.name AS patient_name,
-        u.profile_picture,
-        pp.age AS patient_age,
-          pp.weight,
-          pp.height,
-          pp.gender,
-          pp.blood_group
+      u.profile_picture,
+      pp.age AS patient_age,
+      pp.weight,
+      pp.height,
+      pp.gender,
+      pp.blood_group,
+      mr.report_status,
+      mr.lab_tests_count,
+      mr.id as report_id,
+      mr.diagnosis as triage_diagnosis,
+      mr.lab_tests as triage_selected_tests
        FROM appointments a
        LEFT JOIN users u ON a.user_id = u.id
        LEFT JOIN patient_profiles pp ON u.id = pp.user_id
+       LEFT JOIN medical_reports mr ON a.id = mr.appointment_id
        WHERE a.doctor_id = $1
       `;
     const queryParams = [finalDoctorId];

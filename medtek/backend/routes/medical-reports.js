@@ -120,10 +120,14 @@ router.post('/', auth, async (req, res) => {
       ]
     );
 
-    // ✅ NEW: Automatically mark the appointment as 'completed'
+    // ✅ NEW: Update appointment status based on lab tests
+    // If tests ordered -> 'testing_in_progress' (so it stays in Active list showing "Testing in Progress")
+    // If NO tests -> 'completed' (so it moves to Completed list)
+    const newStatus = finalLabTestsCount > 0 ? 'testing_in_progress' : 'completed';
+
     await pool.query(
-      `UPDATE appointments SET status = 'completed' WHERE id = $1`,
-      [appointment_id]
+      `UPDATE appointments SET status = $1 WHERE id = $2`,
+      [newStatus, appointment_id]
     );
 
     res.status(201).json({ reportId: result.rows[0].id });

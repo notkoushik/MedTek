@@ -4,6 +4,8 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const pool = require('./db');
 const usersRouter = require('./routes/users');
@@ -23,7 +25,22 @@ app.get('/', (req, res) => {
 });
 
 // ---------- GLOBAL MIDDLEWARE (MUST BE IN THIS ORDER) ----------
+app.use(helmet());
 app.use(cors());
+
+// Rate limiting: Only enable in production
+if (process.env.NODE_ENV === 'production') {
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+  app.use(limiter);
+  console.log('✅ Rate limiting enabled (production mode)');
+} else {
+  console.log('⚠️  Rate limiting disabled (development mode)');
+}
 app.use(express.json({ limit: '50mb' })); // ✅ Increase limit
 app.use(express.urlencoded({ extended: true, limit: '50mb' })); // ✅ Add this
 app.use('/uploads', express.static('uploads'));

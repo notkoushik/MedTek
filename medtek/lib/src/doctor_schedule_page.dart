@@ -50,6 +50,9 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
   }
 
   Future<void> _selectDate(BuildContext context) async {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
@@ -57,12 +60,18 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
       lastDate: DateTime.now().add(const Duration(days: 365)),
       builder: (context, child) {
         return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
-              primary: Colors.red.shade400,
-              onPrimary: Colors.white,
-              onSurface: Colors.black,
-            ),
+          data: theme.copyWith(
+            colorScheme: isDark
+                ? const ColorScheme.dark(
+                    primary: Colors.redAccent,
+                    onPrimary: Colors.white,
+                    onSurface: Colors.white,
+                  )
+                : ColorScheme.light(
+                    primary: Colors.red.shade400,
+                    onPrimary: Colors.white,
+                    onSurface: Colors.black,
+                  ),
           ),
           child: child!,
         );
@@ -78,22 +87,26 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F6F9),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: theme.appBarTheme.backgroundColor,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black87),
+          icon: Icon(Icons.arrow_back, color: colorScheme.onSurface),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           'My Schedule',
-          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold),
+          style: TextStyle(color: colorScheme.onSurface, fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.calendar_month, color: Colors.red.shade400),
+            icon: Icon(Icons.calendar_month, color: isDark ? Colors.redAccent : Colors.red.shade400),
             onPressed: () => _selectDate(context),
           ),
         ],
@@ -114,17 +127,21 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
   }
 
   Widget _buildHeader() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     final dateStr = DateFormat('MMMM yyyy').format(_selectedDate);
     final dayStr = DateFormat('EEE, d').format(_selectedDate);
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.shade100,
+            color: isDark ? Colors.black26 : Colors.grey.shade100,
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -144,7 +161,7 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade800,
+                      color: colorScheme.onSurface,
                     ),
                   ),
                   Row(
@@ -154,11 +171,11 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
-                          color: Colors.grey.shade500,
+                          color: colorScheme.onSurfaceVariant,
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Icon(Icons.arrow_drop_down, color: Colors.grey.shade400),
+                      Icon(Icons.arrow_drop_down, color: colorScheme.onSurfaceVariant),
                     ],
                   ),
                 ],
@@ -169,10 +186,10 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade50,
+                    color: isDark ? Colors.red.withOpacity(0.2) : Colors.red.shade50,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(Icons.calendar_today, color: Colors.red.shade400),
+                  child: Icon(Icons.calendar_today, color: isDark ? Colors.redAccent : Colors.red.shade400),
                 ),
               ),
             ],
@@ -198,10 +215,10 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                     margin: const EdgeInsets.only(right: 12),
                     width: 50,
                     decoration: BoxDecoration(
-                      color: isSelected ? Colors.red.shade400 : Colors.transparent,
+                      color: isSelected ? (isDark ? Colors.redAccent : Colors.red.shade400) : Colors.transparent,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: isSelected ? Colors.transparent : Colors.grey.shade200,
+                        color: isSelected ? Colors.transparent : (isDark ? Colors.white24 : Colors.grey.shade200),
                       ),
                     ),
                     child: Column(
@@ -210,7 +227,7 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                         Text(
                           DateFormat('EEE').format(day),
                           style: TextStyle(
-                            color: isSelected ? Colors.white : Colors.grey.shade500,
+                            color: isSelected ? Colors.white : colorScheme.onSurfaceVariant,
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
                           ),
@@ -219,7 +236,7 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                         Text(
                           day.day.toString(),
                           style: TextStyle(
-                            color: isSelected ? Colors.white : Colors.grey.shade800,
+                            color: isSelected ? Colors.white : colorScheme.onSurface,
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -235,9 +252,18 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
           // Summary
            Row(
             children: [
-              _buildSummaryChip('${_appointments.length} Patients', Colors.blue.shade50, Colors.blue),
+              _buildSummaryChip(
+                  '${_appointments.length} Patients', 
+                  isDark ? Colors.blue.withOpacity(0.2) : Colors.blue.shade50, 
+                  isDark ? Colors.blue.shade200 : Colors.blue
+              ),
               const SizedBox(width: 10),
-              _buildSummaryChip('Select Date', Colors.grey.shade100, Colors.grey.shade600, onTap: () => _selectDate(context)),
+              _buildSummaryChip(
+                  'Select Date', 
+                  isDark ? Colors.white10 : Colors.grey.shade100, 
+                  colorScheme.onSurfaceVariant, 
+                  onTap: () => _selectDate(context)
+              ),
             ],
           ),
         ],
@@ -263,20 +289,21 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
   }
 
   Widget _buildEmptyState() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.event_available, size: 80, color: Colors.grey.shade300),
+          Icon(Icons.event_available, size: 80, color: colorScheme.outlineVariant),
           const SizedBox(height: 16),
           Text(
             'No appointments',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade700),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: colorScheme.onSurface),
           ),
           const SizedBox(height: 8),
           Text(
             'You are free for the day!',
-            style: TextStyle(color: Colors.grey.shade500),
+            style: TextStyle(color: colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -284,6 +311,10 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
   }
 
   Widget _buildTimelineList() {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     return ListView.builder(
       padding: const EdgeInsets.all(20),
       itemCount: _appointments.length,
@@ -304,7 +335,7 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                     time,
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.grey.shade600,
+                      color: colorScheme.onSurfaceVariant,
                       fontSize: 13
                     ),
                   ),
@@ -316,15 +347,15 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                   Container(
                     width: 2,
                     height: 20,
-                    color: Colors.grey.shade300,
+                    color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
                   ),
                   Container(
                     width: 12,
                     height: 12,
                     decoration: BoxDecoration(
-                      color: Colors.red.shade400,
+                      color: isDark ? Colors.redAccent : Colors.red.shade400,
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
+                      border: Border.all(color: theme.cardColor, width: 2),
                       boxShadow: [
                          BoxShadow(
                            color: Colors.red.withOpacity(0.3),
@@ -337,7 +368,7 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                   Expanded(
                     child: Container(
                       width: 2,
-                      color: Colors.grey.shade300,
+                      color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
                     ),
                   ),
                 ],
@@ -364,6 +395,10 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
   }
 
   Widget _buildAppointmentCard(Map<String, dynamic> appt) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     final name = appt['patient_name']?.toString() ?? 'Unknown';
     final age = appt['patient_age']?.toString() ?? 'N/A';
     final reason = appt['reason']?.toString() ?? 'Check-up';
@@ -375,15 +410,16 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
 
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.shade100,
+            color: isDark ? Colors.black26 : Colors.grey.shade100,
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
         ],
+        border: isDark ? Border.all(color: Colors.white10) : null,
       ),
       child: Material(
         color: Colors.transparent,
@@ -392,6 +428,8 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
           onTap: () {
             // Navigate to detail similar to PatientList
             final patientData = {
+              'id': appt['user_id']?.toString() ?? '',
+              'appointment_id': appt['id']?.toString() ?? '',
               'name': name,
               'age': age,
               'condition': reason, // Using reason as condition for context
@@ -409,7 +447,7 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.1),
+                        color: isDark ? statusColor.withOpacity(0.1) : statusColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
@@ -421,7 +459,7 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                         ),
                       ),
                     ),
-                    Icon(Icons.more_horiz, color: Colors.grey.shade400),
+                    Icon(Icons.more_horiz, color: colorScheme.onSurfaceVariant),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -429,10 +467,13 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                   children: [
                      CircleAvatar(
                        radius: 20,
-                       backgroundColor: Colors.blue.shade50,
+                       backgroundColor: isDark ? Colors.blue.withOpacity(0.2) : Colors.blue.shade50,
                        child: Text(
                          name.isNotEmpty ? name[0] : '?',
-                         style: TextStyle(color: Colors.blue.shade700, fontWeight: FontWeight.bold),
+                         style: TextStyle(
+                             color: isDark ? Colors.blue.shade200 : Colors.blue.shade700, 
+                             fontWeight: FontWeight.bold
+                         ),
                        ),
                      ),
                      const SizedBox(width: 12),
@@ -441,11 +482,15 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                        children: [
                          Text(
                            name,
-                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                           style: TextStyle(
+                               fontWeight: FontWeight.bold, 
+                               fontSize: 16,
+                               color: colorScheme.onSurface
+                           ),
                          ),
                          Text(
                            'Age: $age • General',
-                           style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                           style: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
                          ),
                        ],
                      ),
@@ -454,7 +499,7 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                 const SizedBox(height: 12),
                 Text(
                   'Reason: $reason',
-                  style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                  style: TextStyle(color: colorScheme.onSurface.withOpacity(0.8), fontSize: 13),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -463,10 +508,11 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                       child: OutlinedButton(
                         onPressed: () {},
                         style: OutlinedButton.styleFrom(
+                           foregroundColor: colorScheme.onSurface,
                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                           side: BorderSide(color: Colors.grey.shade300),
+                           side: BorderSide(color: colorScheme.outline),
                         ),
-                        child: const Text('Reschedule', style: TextStyle(color: Colors.black54)),
+                        child: Text('Reschedule', style: TextStyle(color: colorScheme.onSurface)),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -474,7 +520,8 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
                       child: ElevatedButton(
                         onPressed: () {},
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red.shade400,
+                          backgroundColor: isDark ? Colors.redAccent : Colors.red.shade400,
+                          foregroundColor: Colors.white,
                           elevation: 0,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),

@@ -1,6 +1,7 @@
 // lib/src/doctor_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../main.dart'; // Import ThemeNotifier
 
 import '../services/session_service.dart';
 import '../services/api_service.dart';
@@ -44,14 +45,39 @@ class _DoctorDashboardState extends State<DoctorDashboard> {
   }
 }
 
-class DoctorPatientDashboard extends StatelessWidget {
+
+
+class DoctorPatientDashboard extends StatefulWidget {
   const DoctorPatientDashboard({super.key});
+
+  @override
+  State<DoctorPatientDashboard> createState() => _DoctorPatientDashboardState();
+}
+
+class _DoctorPatientDashboardState extends State<DoctorPatientDashboard> {
+  // Key to force FutureBuilder rebuild
+  int _refreshKey = 0;
+
+  Future<void> _handleRefresh() async {
+    setState(() {
+      _refreshKey++;
+    });
+    // Wait a bit to show the spinner
+    await Future.delayed(const Duration(milliseconds: 800));
+  }
 
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionService>();
     final doctorId = session.user?['id']?.toString() ?? '';
+    // Re-create API service or use existing.
     final api = ApiService();
+
+    final themeNotifier = Provider.of<ThemeNotifier>(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Use Key to force rebuild of children that depend on Futures
+    final refreshKey = ValueKey(_refreshKey);
 
     return Scaffold(
       appBar: AppBar(
@@ -59,135 +85,150 @@ class DoctorPatientDashboard extends StatelessWidget {
         centerTitle: true,
         actions: [
           IconButton(
+            icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+            tooltip: 'Toggle Theme',
+            onPressed: () {
+              themeNotifier.setMode(isDark ? ThemeMode.light : ThemeMode.dark);
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.notifications_outlined),
             onPressed: () {},
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _DoctorHeaderCard(doctorId: doctorId, api: api),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: _StatCard(
-                    title: 'Today\'s\nPatients',
-                    color: Colors.green,
-                    icon: Icons.people,
-                    future: api.getDoctorSummary(doctorId),
-                    extractor: (m) => m['todaysPatients'] as int? ?? 0,
-                    onTap: () {
+      body: RefreshIndicator(
+        onRefresh: _handleRefresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            key: refreshKey, // Force rebuild on refresh
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _DoctorHeaderCard(doctorId: doctorId, api: api),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      title: 'Today\'s\nPatients',
+                      color: Colors.green,
+                      icon: Icons.people,
+                      future: api.getDoctorSummary(doctorId),
+                      extractor: (m) => m['todaysPatients'] as int? ?? 0,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const PatientsListPage(initialIndex: 0), // Active
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _StatCard(
+                      title: 'Pending\nReports',
+                      color: Colors.orange,
+                      icon: Icons.pending_actions,
+                      future: api.getDoctorSummary(doctorId),
+                      extractor: (m) => m['pendingReports'] as int? ?? 0,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const PatientsListPage(initialIndex: 1), // Pending
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _StatCard(
+                      title: 'Lab Tests\nOrdered',
+                      color: Colors.purple,
+                      icon: Icons.biotech,
+                      future: api.getDoctorSummary(doctorId),
+                      extractor: (m) => m['labTestsOrdered'] as int? ?? 0,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const PatientsListPage(initialIndex: 2), // Completed/Labs
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                   const Text(
+                    'Recent Patients',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  TextButton(
+                    onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const PatientsListPage(initialIndex: 0), // Active
+                          builder: (_) => const PatientsListPage(),
                         ),
                       );
                     },
+                    child: const Text('View All'),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _StatCard(
-                    title: 'Pending\nReports',
-                    color: Colors.orange,
-                    icon: Icons.pending_actions,
-                    future: api.getDoctorSummary(doctorId),
-                    extractor: (m) => m['pendingReports'] as int? ?? 0,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const PatientsListPage(initialIndex: 1), // Pending
-                        ),
-                      );
-                    },
+                ],
+              ),
+              const SizedBox(height: 12),
+              _RecentPatientsList(doctorId: doctorId, api: api),
+              const SizedBox(height: 24),
+              const Text(
+                'Quick Actions',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildActionButton(
+                      context: context,
+                      label: 'Schedule',
+                      icon: Icons.calendar_today,
+                      color: Colors.red,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const DoctorSchedulePage(),
+                          ),
+                        );
+                      },
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _StatCard(
-                    title: 'Lab Tests\nOrdered',
-                    color: Colors.purple,
-                    icon: Icons.biotech,
-                    future: api.getDoctorSummary(doctorId),
-                    extractor: (m) => m['labTestsOrdered'] as int? ?? 0,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const PatientsListPage(initialIndex: 2), // Completed/Labs
-                        ),
-                      );
-                    },
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildActionButton(
+                      context: context,
+                      label: 'Reports',
+                      icon: Icons.assignment,
+                      color: Colors.teal,
+                      onTap: () {},
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Recent Patients',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const PatientsListPage(),
-                      ),
-                    );
-                  },
-                  child: const Text('View All'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _RecentPatientsList(doctorId: doctorId, api: api),
-            const SizedBox(height: 24),
-            const Text(
-              'Quick Actions',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildActionButton(
-                    label: 'Schedule',
-                    icon: Icons.calendar_today,
-                    color: Colors.red,
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const DoctorSchedulePage(),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildActionButton(
-                    label: 'Reports',
-                    icon: Icons.assignment,
-                    color: Colors.teal,
-                    onTap: () {},
-                  ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildActionButton({
+    required BuildContext context,
     required String label,
     required IconData icon,
     required Color color,
@@ -236,6 +277,9 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return FutureBuilder<Map<String, dynamic>>(
       future: future,
       builder: (context, snapshot) {
@@ -243,8 +287,7 @@ class _StatCard extends StatelessWidget {
         return Card(
           elevation: 2,
           clipBehavior: Clip.antiAlias,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           child: InkWell(
             onTap: onTap,
             child: Padding(
@@ -267,7 +310,7 @@ class _StatCard extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey.shade600,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -369,10 +412,14 @@ class _RecentPatientsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     if (doctorId.isEmpty) {
       return Text(
         'Not logged in as doctor',
-        style: TextStyle(color: Colors.grey.shade600),
+        style: TextStyle(color: colorScheme.onSurfaceVariant),
       );
     }
 
@@ -387,13 +434,14 @@ class _RecentPatientsList extends StatelessWidget {
           return Center(
             child: Text(
               'No recent patients yet',
-              style: TextStyle(color: Colors.grey.shade600),
+              style: TextStyle(color: colorScheme.onSurfaceVariant),
             ),
           );
         }
 
         return Column(
           children: docs.map((data) {
+            print('DEBUG Recent: ID=${data['patient_id']}, Appt=${data['appointment_id']}');
             final patient = {
               'id': data['patient_id']?.toString() ?? '',
               'appointment_id': data['appointment_id']?.toString() ?? '',
@@ -422,13 +470,13 @@ class _RecentPatientsList extends StatelessWidget {
               child: ListTile(
                 contentPadding: const EdgeInsets.all(12),
                 leading: CircleAvatar(
-                  backgroundColor: Colors.blue.shade100,
+                  backgroundColor: isDark ? Colors.blue.withOpacity(0.2) : Colors.blue.shade100,
                   child: Text(
                     patient['name']!.isNotEmpty
                         ? patient['name']![0]
                         : '?',
                     style: TextStyle(
-                      color: Colors.blue.shade700,
+                      color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -440,14 +488,17 @@ class _RecentPatientsList extends StatelessWidget {
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Age: ${patient['age']} • ${patient['condition']}'),
+                    Text(
+                        'Age: ${patient['age']} • ${patient['condition']}',
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                    ),
                     if (labTests.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
                           'Ordered: $labTests',
                           style: TextStyle(
-                            color: Colors.purple.shade700,
+                            color: isDark ? Colors.purple.shade300 : Colors.purple.shade700,
                             fontWeight: FontWeight.w500,
                             fontSize: 12,
                           ),
@@ -462,10 +513,10 @@ class _RecentPatientsList extends StatelessWidget {
                     Text(
                       timeLabel,
                       style: TextStyle(
-                          fontSize: 11, color: Colors.grey.shade600),
+                          fontSize: 11, color: colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 4),
-                    const Icon(Icons.arrow_forward_ios, size: 16),
+                    Icon(Icons.arrow_forward_ios, size: 16, color: colorScheme.onSurfaceVariant),
                   ],
                 ),
                 onTap: () {
@@ -473,9 +524,9 @@ class _RecentPatientsList extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (_) =>
                           PatientMonitorPage(patient: {
-                              ...patient,
-                              'lab_tests': labTests,
-                              'created_at': createdAt,
+                                ...patient,
+                                'lab_tests': labTests,
+                                'created_at': createdAt,
                           }),
                     ),
                   );

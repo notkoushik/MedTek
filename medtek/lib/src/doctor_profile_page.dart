@@ -1,6 +1,7 @@
 // lib/src/doctor_profile_page.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../main.dart'; // ThemeNotifier
 
 import '../services/session_service.dart';
 import '../services/api_service.dart';
@@ -53,13 +54,14 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
   }
 
   @override
-  // lib/src/doctor_profile_page.dart
-
-  @override
   Widget build(BuildContext context) {
     // ✅ Watch for session changes - UI rebuilds when session.notifyListeners() is called
     final session = context.watch<SessionService>();
     final user = session.user;
+
+    final themeNotifier = Provider.of<ThemeNotifier>(context);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     debugPrint('🎨 BUILDING DOCTOR PROFILE PAGE');
     debugPrint('   User: ${user?['name']}');
@@ -79,6 +81,13 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
         title: const Text('My Profile'),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: Icon(isDark ? Icons.light_mode : Icons.dark_mode),
+            tooltip: 'Toggle Theme',
+            onPressed: () {
+              themeNotifier.setMode(isDark ? ThemeMode.light : ThemeMode.dark);
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
@@ -106,11 +115,11 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
           ),
         ],
       ),
-      body: _buildProfileContent(user),
+      body: _buildProfileContent(user, theme, isDark),
     );
   }
 
-  Widget _buildProfileContent(Map<String, dynamic> user) {
+  Widget _buildProfileContent(Map<String, dynamic> user, ThemeData theme, bool isDark) {
     // ✅ Get data from session (already updated by API calls)
     final name = (user['name'] ?? 'Doctor').toString();
     final email = (user['email'] ?? '').toString();
@@ -129,7 +138,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
       physics: const AlwaysScrollableScrollPhysics(),
       child: Column(
         children: [
-          _buildHeader(name, specialization, experienceYears.toString(), verified),
+          _buildHeader(name, specialization, experienceYears.toString(), verified, isDark),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -140,6 +149,8 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                   icon: Icons.local_hospital,
                   label: 'Hospital',
                   value: hospitalName,
+                  theme: theme,
+                  isDark: isDark,
                   subtitle: hospitalAddress.isNotEmpty ? hospitalAddress : null,
                 ),
                 const SizedBox(height: 12),
@@ -149,6 +160,8 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                   icon: Icons.work,
                   label: 'Experience',
                   value: '$experienceYears years',
+                  theme: theme,
+                  isDark: isDark,
                 ),
                 const SizedBox(height: 12),
 
@@ -157,6 +170,8 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                   icon: Icons.email,
                   label: 'Email',
                   value: email,
+                  theme: theme,
+                  isDark: isDark,
                 ),
                 const SizedBox(height: 12),
 
@@ -165,26 +180,38 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                   icon: Icons.medical_services,
                   label: 'Specialization',
                   value: specialization,
+                  theme: theme,
+                  isDark: isDark,
                 ),
                 const SizedBox(height: 24),
 
                 // About section
-                const Text(
+                Text(
                   'About',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                   style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface
+                  ),
                 ),
                 const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
+                    color: isDark ? theme.cardColor : Colors.grey.shade50,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.grey.shade200),
+                    border: Border.all(
+                        color: isDark ? Colors.white10 : Colors.grey.shade200
+                    ),
                   ),
                   child: Text(
                     about,
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade700, height: 1.5),
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: theme.colorScheme.onSurfaceVariant,
+                        height: 1.5
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
@@ -193,14 +220,14 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                 if (true) ...[
                   const Divider(),
                   ExpansionTile(
-                    title: const Text('Debug Info'),
+                    title: Text('Debug Info', style: TextStyle(color: theme.colorScheme.onSurface)),
                     children: [
                       Container(
                         padding: const EdgeInsets.all(12),
-                        color: Colors.grey.shade100,
+                        color: isDark ? Colors.black54 : Colors.grey.shade100,
                         child: SelectableText(
                           'User Data:\n${user.toString()}',
-                          style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                          style: TextStyle(fontSize: 12, fontFamily: 'monospace', color: theme.colorScheme.onSurface),
                         ),
                       ),
                     ],
@@ -215,12 +242,14 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
     );
   }
 
-  Widget _buildHeader(String name, String specialization, String exp, bool verified) {
+  Widget _buildHeader(String name, String specialization, String exp, bool verified, bool isDark) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [Colors.red.shade600, Colors.red.shade400],
+          colors: isDark
+              ? [const Color(0xFFB71C1C), const Color(0xFFD32F2F)]
+              : [Colors.red.shade600, Colors.red.shade400],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -346,17 +375,21 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
     required IconData icon,
     required String label,
     required String value,
+    required ThemeData theme,
+    required bool isDark,
     String? subtitle,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(
+            color: isDark ? Colors.white10 : Colors.grey.shade200
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.shade100,
+            color: isDark ? Colors.black26 : Colors.grey.shade100,
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -367,7 +400,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.red.shade50,
+              color: isDark ? Colors.red.withOpacity(0.1) : Colors.red.shade50,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: Colors.red.shade700, size: 24),
@@ -381,16 +414,17 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                   label,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.grey.shade600,
+                    color: theme.colorScheme.onSurfaceVariant,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
                 if (subtitle != null) ...[
@@ -399,7 +433,7 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                     subtitle,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey.shade500,
+                      color: theme.colorScheme.onSurfaceVariant.withOpacity(0.8),
                     ),
                   ),
                 ],

@@ -7,6 +7,9 @@ import 'package:intl/intl.dart';
 
 import '../services/api_service.dart';
 import '../services/session_service.dart';
+import '../services/location_service.dart'; // NEW
+import '../screens/rider/ride_booking_screen.dart'; // NEW
+import 'package:geocoding/geocoding.dart'; // NEW for fallback
 
 class BookAppointmentPage extends StatefulWidget {
   final Map<String, dynamic> doctor;   // must contain doctorId, userId, name, specialization
@@ -480,23 +483,127 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
     }
   }
 
+
+
   Future<void> _selectTime() async {
-    final time = await showTimePicker(
+    // Default to now or previously selected
+    final initial = _selectedTime ?? TimeOfDay.now();
+    int selectedHour = initial.hourOfPeriod;
+    if (selectedHour == 0) selectedHour = 12; // Handle 12 AM/PM logic
+    int selectedMinute = initial.minute;
+    String selectedPeriod = initial.period == DayPeriod.am ? 'AM' : 'PM';
+
+    final result = await showDialog<TimeOfDay>(
       context: context,
-      initialTime: TimeOfDay.now(),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: Colors.red),
-          ),
-          child: child!,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Center(child: Text('Select Time')),
+              content: SizedBox(
+                height: 150,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // HOUR
+                    _buildScrollPicker(
+                      values: List.generate(12, (index) => (index + 1).toString()),
+                      selectedValue: selectedHour.toString(),
+                      onChanged: (val) {
+                        setDialogState(() => selectedHour = int.parse(val));
+                      },
+                    ),
+                    const Text(' : ', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    // MINUTE
+                    _buildScrollPicker(
+                      values: List.generate(60, (index) => index.toString().padLeft(2, '0')),
+                      selectedValue: selectedMinute.toString().padLeft(2, '0'),
+                      onChanged: (val) {
+                        setDialogState(() => selectedMinute = int.parse(val));
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    // AM/PM
+                    _buildScrollPicker(
+                      values: ['AM', 'PM'],
+                      selectedValue: selectedPeriod,
+                      onChanged: (val) {
+                        setDialogState(() => selectedPeriod = val);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    // Convert back to TimeOfDay (24h format)
+                    int hour24 = selectedHour;
+                    if (selectedPeriod == 'AM' && selectedHour == 12) hour24 = 0;
+                    if (selectedPeriod == 'PM' && selectedHour != 12) hour24 += 12;
+
+                    Navigator.pop(context, TimeOfDay(hour: hour24, minute: selectedMinute));
+                  },
+                  style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                  child: const Text('OK'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
 
-    if (time != null) {
-      setState(() => _selectedTime = time);
+    if (result != null) {
+      setState(() => _selectedTime = result);
     }
+  }
+
+  Widget _buildScrollPicker({
+    required List<String> values,
+    required String selectedValue,
+    required ValueChanged<String> onChanged,
+  }) {
+    return Container(
+      width: 50,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: ListWheelScrollView.useDelegate(
+        itemExtent: 40,
+        diameterRatio: 1.2,
+        perspective: 0.005,
+        physics: const FixedExtentScrollPhysics(),
+        controller: FixedExtentScrollController(
+          initialItem: values.indexOf(selectedValue),
+        ),
+        onSelectedItemChanged: (index) {
+          onChanged(values[index]);
+        },
+        childDelegate: ListWheelChildLoopingListDelegate(
+          children: values.map((v) {
+            final isSelected = v == selectedValue;
+            return Center(
+              child: Text(
+                v,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? Colors.red : Colors.black,
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmBooking() async {
@@ -575,6 +682,77 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
                 Navigator.pop(context); // hospital detail page
               },
               child: const Text('OK'),
+            ),
+            FilledButton.icon(
+              icon: const Icon(Icons.directions_car, size: 18),
+              label: const Text('Book Ride'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.blue,
+              ),
+              onPressed: () async {
+                try {
+                  // Show loading
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Getting current location...')),
+                  );
+
+                  // Get current location (automatically requests permission if needed)
+                  final locService = LocationService();
+                  final pos = await locService.getCurrentLocation();
+                  
+                  var hospLat = _toDouble(widget.hospital['latitude'] ?? widget.hospital['lat']) ?? 0.0;
+                  var hospLng = _toDouble(widget.hospital['longitude'] ?? widget.hospital['lng']) ?? 0.0;
+
+                  // Fallback if coordinates are missing
+                  if (hospLat == 0.0 || hospLng == 0.0) {
+                    final address = widget.hospital['address']?.toString();
+                    if (address != null && address.isNotEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Fetching hospital location from address...')),
+                      );
+                      try {
+                        List<Location> locations = await locationFromAddress(address);
+                        if (locations.isNotEmpty) {
+                          hospLat = locations.first.latitude;
+                          hospLng = locations.first.longitude;
+                        }
+                      } catch (e) {
+                         print("Geocoding failed: $e");
+                      }
+                    }
+                  }
+
+                  if (hospLat == 0.0 || hospLng == 0.0) {
+                     ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Hospital location not available. Cannot book ride.'), backgroundColor: Colors.orange),
+                    );
+                    return;
+                  }
+
+                  if (!mounted) return;
+                  
+                  // Close dialog/popups
+                  Navigator.pop(context); 
+
+                  // Navigate to Ride Booking
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => RideBookingPage(
+                        pickupLat: pos.lat.toDouble(),
+                        pickupLng: pos.lng.toDouble(),
+                        dropoffLat: hospLat,
+                        dropoffLng: hospLng,
+                        hospitalName: widget.hospital['name']?.toString() ?? 'Hospital',
+                      ),
+                    ),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Location error: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              },
             ),
           ],
         ),

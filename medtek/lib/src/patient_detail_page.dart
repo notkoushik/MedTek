@@ -203,6 +203,8 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
       final rawPatientId = widget.patient['id'];
       final rawAppointmentId = widget.patient['appointment_id'];
 
+      print('DEBUG: Saving report with PatientID=$rawPatientId, ApptID=$rawAppointmentId');
+
       if (rawPatientId == null || rawAppointmentId == null) {
         _showMessage(
           'Missing patient or appointment id',
@@ -212,12 +214,13 @@ class _PatientDetailPageState extends State<PatientDetailPage> {
         return;
       }
 
-      final patientId = int.tryParse(rawPatientId);
-      final appointmentId = int.tryParse(rawAppointmentId);
+      // Robust parsing
+      final patientId = int.tryParse(rawPatientId.toString().trim());
+      final appointmentId = int.tryParse(rawAppointmentId.toString().trim());
 
       if (patientId == null || appointmentId == null) {
         _showMessage(
-          'Invalid patient or appointment id',
+          'Invalid ID format: P=$rawPatientId, A=$rawAppointmentId',
           isError: true,
         );
         setState(() => _saving = false);

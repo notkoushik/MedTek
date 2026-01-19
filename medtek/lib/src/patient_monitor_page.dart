@@ -54,6 +54,10 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
     final name = widget.patient['name'] ?? 'Unknown';
     final age = widget.patient['age'] ?? 'N/A';
     final condition = widget.patient['condition'] ?? 'N/A';
@@ -63,13 +67,13 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
         : DateTime.now().toString().split(' ')[0];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F6F9),
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('Patient Monitor'),
         centerTitle: true,
         elevation: 0,
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
+        backgroundColor: theme.appBarTheme.backgroundColor,
+        foregroundColor: theme.appBarTheme.foregroundColor,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -80,11 +84,11 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: theme.cardColor,
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.blue.shade100.withOpacity(0.2),
+                    color: isDark ? Colors.black26 : Colors.blue.shade100.withOpacity(0.2),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -94,13 +98,13 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
                 children: [
                    CircleAvatar(
                     radius: 30,
-                    backgroundColor: Colors.blue.shade50,
+                    backgroundColor: isDark ? Colors.blue.withOpacity(0.2) : Colors.blue.shade50,
                     child: Text(
                       name.isNotEmpty ? name[0] : '?',
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade700,
+                        color: isDark ? Colors.blue.shade200 : Colors.blue.shade700,
                       ),
                     ),
                   ),
@@ -111,10 +115,10 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
                       children: [
                         Text(
                           name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                            color: colorScheme.onSurface,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -122,7 +126,7 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
                           '$age Years • $condition',
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.grey.shade600,
+                            color: colorScheme.onSurfaceVariant,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -131,7 +135,7 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
                           'Date: $date',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Colors.grey.shade400,
+                            color: colorScheme.onSurfaceVariant.withOpacity(0.7),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -139,10 +143,10 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
                           spacing: 8,
                           runSpacing: 8,
                           children: [
-                            _buildInfoChip(Icons.monitor_weight_outlined, '${widget.patient['weight'] ?? 'N/A'} kg'),
-                            _buildInfoChip(Icons.height, '${widget.patient['height'] ?? 'N/A'} cm'),
-                            _buildInfoChip(Icons.person_outline, '${widget.patient['gender'] ?? 'N/A'}'),
-                            _buildInfoChip(Icons.bloodtype_outlined, '${widget.patient['blood_group'] ?? 'N/A'}', color: Colors.red),
+                            _buildInfoChip(Icons.monitor_weight_outlined, '${widget.patient['weight'] ?? 'N/A'} kg', isDark),
+                            _buildInfoChip(Icons.height, '${widget.patient['height'] ?? 'N/A'} cm', isDark),
+                            _buildInfoChip(Icons.person_outline, '${widget.patient['gender'] ?? 'N/A'}', isDark),
+                            _buildInfoChip(Icons.bloodtype_outlined, '${widget.patient['blood_group'] ?? 'N/A'}', isDark, color: Colors.red),
                           ],
                         ),
                       ],
@@ -157,24 +161,24 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                 Text(
                   'Lab Tests Monitor',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.black87,
+                    color: colorScheme.onSurface,
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.purple.shade50,
+                    color: isDark ? Colors.purple.withOpacity(0.2) : Colors.purple.shade50,
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
                     '${_labTests.where((t) => t['isDone']).length}/${_labTests.length} Done',
                     style: TextStyle(
-                      color: Colors.purple.shade700,
+                      color: isDark ? Colors.purple.shade200 : Colors.purple.shade700,
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
@@ -190,16 +194,16 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(30),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: theme.cardColor,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
                   children: [
-                    Icon(Icons.assignment_turned_in_outlined, size: 48, color: Colors.grey.shade300),
+                    Icon(Icons.assignment_turned_in_outlined, size: 48, color: colorScheme.outlineVariant),
                     const SizedBox(height: 12),
                     Text(
                       'No lab tests ordered',
-                      style: TextStyle(color: Colors.grey.shade500),
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
                     ),
                     const SizedBox(height: 20),
                     // If no tests ordered, enable checkout immediately
@@ -238,15 +242,17 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: theme.cardColor,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: isDone ? Colors.green.shade100 : Colors.orange.shade100,
+                        color: isDone 
+                            ? (isDark ? Colors.green.withOpacity(0.3) : Colors.green.shade100) 
+                            : (isDark ? Colors.orange.withOpacity(0.3) : Colors.orange.shade100),
                         width: 1,
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.grey.shade50,
+                          color: isDark ? Colors.black12 : Colors.grey.shade50,
                           blurRadius: 4,
                           offset: const Offset(0, 2),
                         ),
@@ -257,12 +263,16 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
                       leading: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: isDone ? Colors.green.shade50 : Colors.orange.shade50,
+                          color: isDone 
+                            ? (isDark ? Colors.green.withOpacity(0.2) : Colors.green.shade50) 
+                            : (isDark ? Colors.orange.withOpacity(0.2) : Colors.orange.shade50),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
                           isDone ? Icons.check : Icons.hourglass_top,
-                          color: isDone ? Colors.green : Colors.orange,
+                          color: isDone 
+                            ? (isDark ? Colors.green.shade300 : Colors.green) 
+                            : (isDark ? Colors.orange.shade300 : Colors.orange),
                           size: 20,
                         ),
                       ),
@@ -270,7 +280,9 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
                         test['name'],
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          color: isDone ? Colors.black87 : Colors.black54,
+                          color: isDone 
+                            ? colorScheme.onSurface 
+                            : colorScheme.onSurface.withOpacity(0.7),
                           decoration: isDone ? TextDecoration.none : null,
                         ),
                       ),
@@ -278,7 +290,9 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
                         test['status'],
                         style: TextStyle(
                           fontSize: 12,
-                          color: isDone ? Colors.green : Colors.orange,
+                          color: isDone 
+                            ? (isDark ? Colors.green.shade300 : Colors.green) 
+                            : (isDark ? Colors.orange.shade300 : Colors.orange),
                           fontWeight: FontWeight.bold
                         ),
                       ),
@@ -301,6 +315,8 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        foregroundColor: colorScheme.onSurface,
+                        side: BorderSide(color: colorScheme.outline),
                       ),
                     ),
                   ),
@@ -341,21 +357,22 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
     );
   }
 
-  Widget _buildInfoChip(IconData icon, String label, {Color color = Colors.blueGrey}) {
+  Widget _buildInfoChip(IconData icon, String label, bool isDark, {Color color = Colors.blueGrey}) {
+    final finalColor = isDark && color == Colors.blueGrey ? Colors.grey.shade400 : color;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: finalColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: color),
+          Icon(icon, size: 14, color: finalColor),
           const SizedBox(width: 4),
           Text(
             label,
-            style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.bold),
+            style: TextStyle(fontSize: 12, color: finalColor, fontWeight: FontWeight.bold),
           ),
         ],
       ),

@@ -6,8 +6,14 @@ import 'session_service.dart';
 import '../models/hospital.dart';
 
 class ApiService {
-  // ✅ CONFIGURATION (Dynamic)
-  static String _baseUrl = 'http://192.168.1.151:4000'; 
+  // ✅ CONFIGURATION (Dynamic with Build-Time Default)
+  // Use --dart-define=API_URL=http://your-prod-url.com when building
+  static const String _defaultUrl = String.fromEnvironment(
+    'API_URL', 
+    defaultValue: 'http://192.168.1.151:4000' // Dev fallback
+  );
+  
+  static String _baseUrl = _defaultUrl;
   
   static String get baseUrl => _baseUrl;
   
@@ -455,7 +461,8 @@ class ApiService {
     }
 
     if (status == 'active') {
-      // User Request: "Active" = Today's appointments (any status)
+      // "Active" = Today's appointments (any status - pending, in_progress, completed)
+      // The backend /appointments endpoint returns ALL for the date, now including status
       final now = DateTime.now();
       final dateStr = now.toIso8601String().split('T').first;
       
@@ -477,6 +484,15 @@ class ApiService {
     );
     final map = res.data as Map<String, dynamic>?;
     final all = map?['appointments'] as List<dynamic>? ?? [];
+
+    // Filter by status locally for 'completed' etc.
+    if (status == 'completed') {
+       return all
+          .cast<Map<String, dynamic>>()
+          .where((apt) => apt['status'] == 'completed')
+          .toList();
+    }
+
     return all
         .cast<Map<String, dynamic>>()
         .where((apt) => apt['status'] == status)

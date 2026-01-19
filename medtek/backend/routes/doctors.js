@@ -372,6 +372,7 @@ router.get('/:id/recent-reports', async (req, res) => {
     const result = await pool.query(
       `SELECT 
         mr.id,
+        mr.appointment_id,
         mr.patient_id,
         mr.patient_name,
         pp.age AS patient_age,
@@ -422,9 +423,9 @@ router.post('/:id/reviews', auth, async (req, res) => {
     }
 
     await pool.query(
-      `INSERT INTO doctor_reviews (doctor_id, patient_id, rating, comment)
-       VALUES ($1, $2, $3, $4)
-       ON CONFLICT (doctor_id, patient_id)
+      `INSERT INTO doctor_reviews(doctor_id, patient_id, rating, comment)
+       VALUES($1, $2, $3, $4)
+       ON CONFLICT(doctor_id, patient_id)
        DO UPDATE SET rating = EXCLUDED.rating, comment = EXCLUDED.comment`,
       [doctorId, patientId, rating, comment || '']
     );
@@ -444,10 +445,10 @@ router.get('/:id/reviews', async (req, res) => {
     const result = await pool.query(
       `SELECT 
         dr.id,
-        dr.rating,
-        dr.comment,
-        dr.created_at,
-        u.name as patient_name
+      dr.rating,
+      dr.comment,
+      dr.created_at,
+      u.name as patient_name
        FROM doctor_reviews dr
        JOIN users u ON dr.patient_id = u.id
        WHERE dr.doctor_id = $1

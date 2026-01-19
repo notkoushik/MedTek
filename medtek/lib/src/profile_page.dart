@@ -18,6 +18,7 @@ class PatientProfilePage extends StatefulWidget {
 
 class _PatientProfilePageState extends State<PatientProfilePage> {
   final _api = ApiService();
+  final dobController = TextEditingController(); // NEW
   final ageController = TextEditingController();
   final referenceController = TextEditingController();
   final insuranceController = TextEditingController();
@@ -622,8 +623,59 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
                     ],
                   ),
                   const SizedBox(height: 20),
+                  const SizedBox(height: 20),
+                  
+                  // Date of Birth
+                   TextField(
+                    controller: dobController,
+                    readOnly: true,
+                    style: TextStyle(color: colorScheme.onSurface),
+                    decoration: InputDecoration(
+                      prefixIcon: Icon(Icons.cake, color: Colors.red.shade400),
+                      labelText: "Date of Birth",
+                      labelStyle: TextStyle(color: colorScheme.onSurfaceVariant),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade400),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    ),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: DateTime.now(),
+                        firstDate: DateTime(1900),
+                        lastDate: DateTime.now(),
+                        builder: (ctx, child) {
+                          return Theme(
+                            data: Theme.of(ctx).copyWith(
+                              colorScheme: const ColorScheme.light(primary: Colors.red),
+                            ),
+                            child: child!,
+                          );
+                        }
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          dobController.text = "${picked.day}/${picked.month}/${picked.year}";
+                          // Recalculate age
+                          final now = DateTime.now();
+                          int age = now.year - picked.year;
+                          if (now.month < picked.month || (now.month == picked.month && now.day < picked.day)) {
+                            age--;
+                          }
+                          ageController.text = age.toString();
+                        });
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 18),
+                  
+                  // Age (Read Only)
                   TextField(
                     controller: ageController,
+                    readOnly: true, // Auto-calculated
                     keyboardType: TextInputType.number,
                     style: TextStyle(color: colorScheme.onSurface),
                     decoration: InputDecoration(

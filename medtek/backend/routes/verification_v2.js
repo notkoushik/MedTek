@@ -76,7 +76,7 @@ router.post('/nmc', async (req, res) => {
         }
 
         // 2. Pre-coded NMC Registry (Mock)
-        const validRegistry = ['555666', '123456', '999888'];
+        const validRegistry = ['555666', '123456', '999888','535501'];
 
         // Simulate API delay
         await new Promise(r => setTimeout(r, 1500));
