@@ -242,6 +242,54 @@ router.patch('/:id/profile', auth, async (req, res) => {
   }
 });
 
+// POST /users/assign-hospital
+router.post('/assign-hospital', auth, async (req, res) => {
+  try {
+    const { hospital_id, google_place_id, name, address, city, latitude, longitude } = req.body;
+
+    let targetHospitalId = hospital_id;
+
+    if (!targetHospitalId) {
+      if (!name && !google_place_id) {
+        return res.status(400).json({ error: 'Hospital ID or details required' });
+      }
+
+      // 1. Check existing via Google Place ID
+      if (google_place_id) {
+        const hRes = await pool.query('SELECT id FROM hospitals WHERE google_place_id = $1', [google_place_id]);
+        if (hRes.rows.length > 0) targetHospitalId = hRes.rows[0].id;
+      }
+
+      // 2. Create if not found
+      if (!targetHospitalId) {
+        if (!name || !latitude || !longitude) {
+          return res.status(400).json({ error: 'New hospital requires name, lat, lng' });
+        }
+        // Use ON CONFLICT to handle race conditions or re-insertion safely
+        const insertRes = await pool.query(
+          `INSERT INTO hospitals (name, address, city, latitude, longitude, google_place_id)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (google_place_id) DO UPDATE SET name = EXCLUDED.name
+           RETURNING id`,
+          [name, address || '', city || '', latitude, longitude, google_place_id || null]
+        );
+        targetHospitalId = insertRes.rows[0].id;
+      }
+    }
+
+    // 3. Update User
+    await pool.query(
+      'UPDATE users SET assigned_hospital_id = $1 WHERE id = $2',
+      [targetHospitalId, req.user.id]
+    );
+
+    res.json({ success: true, hospital_id: targetHospitalId });
+  } catch (e) {
+    console.error('Assign hospital error:', e);
+    res.status(500).json({ error: 'Failed to assign hospital' });
+  }
+});
+
 // POST /users/:patientId/assign-doctor
 router.post('/:patientId/assign-doctor', auth, async (req, res) => {
   try {

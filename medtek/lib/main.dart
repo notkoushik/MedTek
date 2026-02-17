@@ -6,6 +6,7 @@ import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'src/auth_page.dart';
 import 'src/patient_dashboard.dart';
 import 'src/doctor_dashboard.dart';
+import 'src/lab_dashboard.dart';
 import 'theme/app_theme.dart';
 
 import 'providers/ride_provider.dart';
@@ -124,7 +125,9 @@ class Medtek extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           home: const EntryGate(),
           routes: {
+            '/login': (context) => const AuthPage(), 
             '/home': (context) => const PatientDashboard(),
+            '/lab-dashboard': (context) => const LabDashboard(), 
 
             // Ride booking: uses doubles passed via arguments map
             '/ride-booking': (context) {
@@ -252,6 +255,8 @@ class _EntryGateState extends State<EntryGate> {
 
     if (role == 'doctor') {
       return const DoctorDashboard();
+    } else if (role == 'lab_assistant') {
+      return const LabDashboard();
     } else {
       return const PatientDashboard();
     }

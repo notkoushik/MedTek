@@ -389,9 +389,16 @@ class _DoctorSchedulePageState extends State<DoctorSchedulePage> {
   }
   
   String _formatTime(String? isoDate) {
-    if (isoDate == null) return '';
-    final dt = DateTime.parse(isoDate);
-    return DateFormat('h:mm a').format(dt);
+    if (isoDate == null || isoDate.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(isoDate);
+      // Convert to local time in case it's stored as UTC
+      final localDt = dt.toLocal(); 
+      return DateFormat('h:mm a').format(localDt);
+    } catch (e) {
+      print('Error parsing date: $isoDate');
+      return '';
+    }
   }
 
   Widget _buildAppointmentCard(Map<String, dynamic> appt) {

@@ -182,6 +182,8 @@ class _MyActivitiesPageState extends State<MyActivitiesPage>
           itemCount: items.length,
           itemBuilder: (context, i) {
             final data = items[i];
+            final actualStatus = data['status']?.toString() ?? status;
+            final queueNumber = data['queue_number'];
 
             String title = '';
             String subtitle = '';
@@ -207,64 +209,118 @@ class _MyActivitiesPageState extends State<MyActivitiesPage>
                   (data['datetime'] ?? _formatDateTime(data['date'])).toString();
             }
 
+            // Determine status color
+            Color statusColor;
+            String statusText = actualStatus.toUpperCase();
+            switch (actualStatus) {
+              case 'confirmed':
+                statusColor = Colors.green;
+                break;
+              case 'declined':
+                statusColor = Colors.red;
+                break;
+              case 'pending':
+              default:
+                statusColor = Colors.orange;
+            }
+
             return Card(
               margin: const EdgeInsets.only(bottom: 12),
               elevation: 2,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 8),
-                leading: CircleAvatar(
-                  backgroundColor:
-                  isRides ? Colors.blue[100] : Colors.green[100],
-                  child: Icon(
-                    isRides ? Icons.local_taxi : Icons.event,
-                    color: isRides ? Colors.blue : Colors.green,
-                    size: 24,
-                  ),
-                ),
-                title: Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                subtitle: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (subtitle.isNotEmpty)
-                        Row(
-                          children: [
-                            const Icon(Icons.access_time, size: 14),
-                            const SizedBox(width: 4),
-                            Expanded(child: Text(subtitle)),
-                          ],
-                        ),
-                      const SizedBox(height: 4),
-                      Row(
+              child: Stack(
+                children: [
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    leading: CircleAvatar(
+                      backgroundColor:
+                      isRides ? Colors.blue[100] : Colors.green[100],
+                      child: Icon(
+                        isRides ? Icons.local_taxi : Icons.event,
+                        color: isRides ? Colors.blue : Colors.green,
+                        size: 24,
+                      ),
+                    ),
+                    title: Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.info_outline, size: 14),
-                          const SizedBox(width: 4),
-                          Text(
-                            status.toUpperCase(),
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: status == 'pending'
-                                  ? Colors.orange
-                                  : Colors.green,
-                              fontSize: 12,
+                          if (subtitle.isNotEmpty)
+                            Row(
+                              children: [
+                                const Icon(Icons.access_time, size: 14),
+                                const SizedBox(width: 4),
+                                Expanded(child: Text(subtitle)),
+                              ],
                             ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(Icons.info_outline, size: 14),
+                              const SizedBox(width: 4),
+                              Text(
+                                statusText,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: statusColor,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
+                    ),
+                    isThreeLine: true,
+                    onTap: () {
+                      // TODO: navigate to details if you add endpoints
+                    },
                   ),
-                ),
-                isThreeLine: true,
-                onTap: () {
-                  // TODO: navigate to details if you add endpoints
-                },
+                  // OP Number Badge - only show if confirmed and has queue number
+                  if (!isRides && queueNumber != null && actualStatus == 'confirmed')
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF10B981), Color(0xFF059669)],
+                          ),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.green.withOpacity(0.3),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.confirmation_number, color: Colors.white, size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              'OP #$queueNumber',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
             );
           },

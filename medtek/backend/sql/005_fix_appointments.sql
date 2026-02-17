@@ -10,3 +10,6 @@ ALTER TABLE appointments
 ADD COLUMN IF NOT EXISTS triage_selected_tests TEXT;
 ALTER TABLE appointments
 ADD COLUMN IF NOT EXISTS triage_notes TEXT;
+-- Add queue_number column for OP number
+ALTER TABLE appointments
+ADD COLUMN IF NOT EXISTS queue_number INTEGER;

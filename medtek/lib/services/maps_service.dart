@@ -225,4 +225,101 @@ class MapsService {
       return null;
     }
   }
+
+  /// Search for nearby hospitals using Google Places Nearby Search API
+  Future<List<Map<String, dynamic>>> searchNearbyHospitals(
+    double lat,
+    double lng, {
+    int radius = 5000, // 5km default
+  }) async {
+    try {
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/nearbysearch/json?'
+            'location=$lat,$lng&'
+            'radius=$radius&'
+            'type=hospital&'
+            'key=$apiKey',
+      );
+
+      debugPrint('🏥 Searching nearby hospitals at $lat,$lng');
+
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data['status'] == 'OK' && data['results'] != null) {
+          final results = data['results'] as List;
+          debugPrint('🏥 Found ${results.length} hospitals');
+
+          return results.map<Map<String, dynamic>>((place) {
+            final location = place['geometry']['location'];
+            return {
+              'id': place['place_id'] ?? '',
+              'name': place['name'] ?? 'Unknown Hospital',
+              'address': place['vicinity'] ?? '',
+              'latitude': (location['lat'] as num).toDouble(),
+              'longitude': (location['lng'] as num).toDouble(),
+              'rating': place['rating']?.toDouble() ?? 0.0,
+              'isOpen': place['opening_hours']?['open_now'] ?? false,
+            };
+          }).toList();
+        } else {
+          debugPrint('🏥 Places API status: ${data['status']}');
+        }
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Failed to search nearby hospitals: $e');
+      return [];
+    }
+  }
+
+  /// Search hospitals by text query
+  Future<List<Map<String, dynamic>>> searchHospitalsByText(
+    String query,
+    double lat,
+    double lng,
+  ) async {
+    try {
+      final url = Uri.parse(
+        'https://maps.googleapis.com/maps/api/place/textsearch/json?'
+            'query=${Uri.encodeComponent("$query hospital")}&'
+            'location=$lat,$lng&'
+            'radius=10000&'
+            'type=hospital&'
+            'key=$apiKey',
+      );
+
+      debugPrint('🔍 Text searching hospitals: $query');
+
+      final response = await http.get(url);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data['status'] == 'OK' && data['results'] != null) {
+          final results = data['results'] as List;
+          debugPrint('🔍 Found ${results.length} results');
+
+          return results.map<Map<String, dynamic>>((place) {
+            final location = place['geometry']['location'];
+            return {
+              'id': place['place_id'] ?? '',
+              'name': place['name'] ?? 'Unknown Hospital',
+              'address': place['formatted_address'] ?? place['vicinity'] ?? '',
+              'latitude': (location['lat'] as num).toDouble(),
+              'longitude': (location['lng'] as num).toDouble(),
+              'rating': place['rating']?.toDouble() ?? 0.0,
+              'isOpen': place['opening_hours']?['open_now'] ?? false,
+            };
+          }).toList();
+        }
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Failed to text search hospitals: $e');
+      return [];
+    }
+  }
 }

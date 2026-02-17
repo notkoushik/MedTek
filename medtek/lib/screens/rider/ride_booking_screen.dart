@@ -1,9 +1,11 @@
 // lib/pages/ride_booking_page.dart
 import 'dart:math';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:medtek/services/api_service.dart';
+import 'package:http/http.dart' as http;
 import 'ride_tracking_screen.dart';
 import 'package:provider/provider.dart';
 import '../../services/session_service.dart';
@@ -238,30 +240,131 @@ class _RideBookingPageState extends State<RideBookingPage> {
     if (_mapboxMap == null) return;
 
     try {
-      final pointManager =
-      await _mapboxMap!.annotations.createPointAnnotationManager();
+      // Create circle annotation manager for markers
+      final circleManager =
+          await _mapboxMap!.annotations.createCircleAnnotationManager();
 
-      // Pickup marker (blue)
-      final pickupMarker = PointAnnotationOptions(
-        geometry: Point(
-          coordinates: Position(widget.pickupLng, widget.pickupLat),
+      // Pickup marker (blue circle)
+      await circleManager.create(
+        CircleAnnotationOptions(
+          geometry: Point(
+            coordinates: Position(widget.pickupLng, widget.pickupLat),
+          ),
+          circleRadius: 10.0,
+          circleColor: Colors.blue.value,
+          circleOpacity: 0.9,
+          circleStrokeWidth: 2.0,
+          circleStrokeColor: Colors.white.value,
         ),
-        iconSize: 1.5,
-        iconColor: Colors.blue.value,
       );
-      await pointManager.create(pickupMarker);
 
-      // Dropoff marker (red)
-      final dropoffMarker = PointAnnotationOptions(
-        geometry: Point(
-          coordinates: Position(widget.dropoffLng, widget.dropoffLat),
+      // Dropoff marker (red circle)
+      await circleManager.create(
+        CircleAnnotationOptions(
+          geometry: Point(
+            coordinates: Position(widget.dropoffLng, widget.dropoffLat),
+          ),
+          circleRadius: 10.0,
+          circleColor: Colors.red.value,
+          circleOpacity: 0.9,
+          circleStrokeWidth: 2.0,
+          circleStrokeColor: Colors.white.value,
         ),
-        iconSize: 1.5,
-        iconColor: Colors.red.value,
       );
-      await pointManager.create(dropoffMarker);
+      
+      // Add route line
+      await _addRouteLine();
     } catch (e) {
       debugPrint('Error adding markers: $e');
+    }
+  }
+
+  // Draw a soft, clean route line from pickup to dropoff
+  Future<void> _addRouteLine() async {
+    if (_mapboxMap == null) return;
+    
+    debugPrint('🗺️ Drawing route from (${widget.pickupLat}, ${widget.pickupLng}) to (${widget.dropoffLat}, ${widget.dropoffLng})');
+    
+    try {
+      // Fetch route from Mapbox Directions API
+      final accessToken = 'pk.eyJ1Ijoic3Jpa2FrcyIsImEiOiJjbTU5ZHBqZ2QxdGVrMnFvaGc3MXRlZjV1In0.1WWDNzjyDZ3maqSS2qXWLQ';
+      final url = 'https://api.mapbox.com/directions/v5/mapbox/driving/'
+          '${widget.pickupLng},${widget.pickupLat};'
+          '${widget.dropoffLng},${widget.dropoffLat}'
+          '?geometries=geojson&overview=full&access_token=$accessToken';
+      
+      debugPrint('🌐 Fetching route from API...');
+      final response = await http.get(Uri.parse(url));
+      debugPrint('📡 Response status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final routes = data['routes'] as List;
+        
+        if (routes.isNotEmpty) {
+          final geometry = routes[0]['geometry'];
+          final coordinates = geometry['coordinates'] as List;
+          
+          debugPrint('✅ Got ${coordinates.length} route points');
+          
+          // Convert to Position list
+          final routeCoords = coordinates.map<Position>((coord) => 
+            Position((coord[0] as num).toDouble(), (coord[1] as num).toDouble())
+          ).toList();
+          
+          // Use polyline annotation manager (more reliable)
+          final polylineManager = await _mapboxMap!.annotations.createPolylineAnnotationManager();
+          await polylineManager.create(PolylineAnnotationOptions(
+            geometry: LineString(coordinates: routeCoords),
+            lineColor: const Color(0xFF4ECDC4).value, // Soft teal
+            lineWidth: 5.0,
+            lineOpacity: 0.9,
+          ));
+          
+          debugPrint('✅ Route line drawn successfully');
+          
+          // Fit camera to show the entire route
+          final centerLng = (widget.pickupLng + widget.dropoffLng) / 2;
+          final centerLat = (widget.pickupLat + widget.dropoffLat) / 2;
+          
+          await _mapboxMap!.flyTo(
+            CameraOptions(
+              center: Point(coordinates: Position(centerLng, centerLat)),
+              zoom: 12.0,
+            ),
+            MapAnimationOptions(duration: 800),
+          );
+        } else {
+          debugPrint('⚠️ No routes found');
+          _drawStraightLine();
+        }
+      } else {
+        debugPrint('❌ API error: ${response.statusCode}');
+        _drawStraightLine();
+      }
+    } catch (e) {
+      debugPrint('❌ Error drawing route: $e');
+      _drawStraightLine();
+    }
+  }
+
+  // Fallback: draw a simple straight line
+  Future<void> _drawStraightLine() async {
+    try {
+      debugPrint('📏 Drawing straight line fallback');
+      final polylineManager = await _mapboxMap!.annotations.createPolylineAnnotationManager();
+      await polylineManager.create(PolylineAnnotationOptions(
+        geometry: LineString(coordinates: [
+          Position(widget.pickupLng, widget.pickupLat),
+          Position(widget.dropoffLng, widget.dropoffLat),
+        ]),
+        lineColor: const Color(0xFF4ECDC4).value,
+        lineWidth: 4.0,
+        lineOpacity: 0.8,
+      ));
+      debugPrint('✅ Straight line drawn');
+    } catch (e2) {
+      debugPrint('❌ Fallback route error: $e2');
     }
   }
 }

@@ -75,11 +75,26 @@ router.post('/', auth, async (req, res) => {
       tests.forEach(t => finalLabTestsJson[t] = 'pending');
     }
 
+    // ✅ Get hospital_id from the appointment for lab filtering
+    let appointmentHospitalId = null;
+    try {
+      const aptRes = await pool.query(
+        'SELECT hospital_id FROM appointments WHERE id = $1',
+        [appointment_id]
+      );
+      if (aptRes.rows.length > 0) {
+        appointmentHospitalId = aptRes.rows[0].hospital_id;
+      }
+    } catch (err) {
+      console.error('Error fetching appointment hospital_id:', err);
+    }
+
     const result = await pool.query(
       `INSERT INTO medical_reports (
          doctor_id,
          patient_id,
          appointment_id,
+         hospital_id,
          diagnosis,
          prescription,
          lab_tests,
@@ -95,15 +110,16 @@ router.post('/', auth, async (req, res) => {
          lab_tests_json
        )
        VALUES (
-         $1, $2, $3, $4, $5, $6, $7,
-         $8, $9, $10, $11, $12, $13,
-         $14, $15, $16
+         $1, $2, $3, $4, $5, $6, $7, $8,
+         $9, $10, $11, $12, $13, $14,
+         $15, $16, $17
        )
        RETURNING id`,
       [
         finalDoctorId,
         patient_id,
         appointment_id,
+        appointmentHospitalId,
         diagnosis || '',
         prescription || '',
         finalLabTestsStr,
@@ -147,9 +163,9 @@ router.patch('/:id/test-status', auth, async (req, res) => {
       return res.status(400).json({ error: 'testName and status are required' });
     }
 
-    // 1. Get current JSON
+    // 1. Get current JSON and appointment_id
     const currentRes = await pool.query(
-      'SELECT lab_tests_json FROM medical_reports WHERE id = $1',
+      'SELECT lab_tests_json, appointment_id FROM medical_reports WHERE id = $1',
       [id]
     );
 
@@ -158,6 +174,7 @@ router.patch('/:id/test-status', auth, async (req, res) => {
     }
 
     let labs = currentRes.rows[0].lab_tests_json || {};
+    const appointmentId = currentRes.rows[0].appointment_id;
 
     // 2. Update status
     if (labs[testName] !== undefined) {
@@ -167,16 +184,91 @@ router.patch('/:id/test-status', auth, async (req, res) => {
       labs[testName] = status;
     }
 
-    // 3. Save back
+    // 3. Check if all tests are done
+    const allTestsDone = Object.keys(labs).length > 0 &&
+      Object.values(labs).every(s => s === 'done');
+
+    // 4. Determine the new report_status
+    const newReportStatus = allTestsDone ? 'completed' : 'awaiting_lab_results';
+
+    // 5. Update medical_reports with lab_tests_json and report_status
     await pool.query(
-      'UPDATE medical_reports SET lab_tests_json = $1 WHERE id = $2',
-      [labs, id]
+      'UPDATE medical_reports SET lab_tests_json = $1, report_status = $2 WHERE id = $3',
+      [labs, newReportStatus, id]
     );
 
-    res.json({ success: true, lab_tests_json: labs });
+    // 6. Update appointment status - use 'ready_for_review' instead of 'completed'
+    // Doctor must manually finalize the consultation
+    if (appointmentId) {
+      const newAppointmentStatus = allTestsDone ? 'ready_for_review' : 'testing_in_progress';
+      await pool.query(
+        'UPDATE appointments SET status = $1 WHERE id = $2',
+        [newAppointmentStatus, appointmentId]
+      );
+    }
+
+    console.log(`✅ Test "${testName}" updated to "${status}" for report ${id}. All done: ${allTestsDone}`);
+
+    res.json({
+      success: true,
+      lab_tests_json: labs,
+      report_status: newReportStatus,
+      all_tests_done: allTestsDone
+    });
 
   } catch (e) {
     console.error('PATCH /test-status error', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ✅ PATCH /:id/complete - Doctor manually completes the consultation
+router.patch('/:id/complete', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1. Get report and verify all tests are done
+    const reportRes = await pool.query(
+      'SELECT report_status, appointment_id FROM medical_reports WHERE id = $1',
+      [id]
+    );
+
+    if (reportRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    const { report_status, appointment_id } = reportRes.rows[0];
+
+    if (report_status !== 'completed') {
+      return res.status(400).json({
+        error: 'Cannot complete consultation - not all tests are done',
+        current_status: report_status
+      });
+    }
+
+    // 2. Update appointment to completed
+    if (appointment_id) {
+      await pool.query(
+        `UPDATE appointments SET status = 'completed', updated_at = NOW() WHERE id = $1`,
+        [appointment_id]
+      );
+    }
+
+    // 3. Add finalized timestamp to report
+    await pool.query(
+      `UPDATE medical_reports SET status = 'finalized', updated_at = NOW() WHERE id = $1`,
+      [id]
+    );
+
+    console.log(`✅ Report ${id} finalized by doctor. Appointment ${appointment_id} completed.`);
+
+    res.json({
+      success: true,
+      message: 'Consultation completed successfully'
+    });
+
+  } catch (e) {
+    console.error('PATCH /:id/complete error', e);
     res.status(500).json({ error: 'Server error' });
   }
 });

@@ -49,7 +49,11 @@ router.get('/trending', async (req, res) => {
         u.id, u.name, u.email,
         d.specialization,
         d.experience_years,
+        d.hospital_id,
         h.name as hospital_name,
+        h.address as hospital_address,
+        h.latitude as hospital_latitude,
+        h.longitude as hospital_longitude,
         CAST(COALESCE(AVG(dr.rating), 0) AS DECIMAL(3,2)) as rating,
         CAST(COUNT(dr.id) AS INTEGER) as review_count,
         d.verified
@@ -58,7 +62,7 @@ router.get('/trending', async (req, res) => {
        LEFT JOIN hospitals h ON d.hospital_id = h.id
        LEFT JOIN doctor_reviews dr ON u.id = dr.doctor_id
        WHERE u.role = 'doctor'
-       GROUP BY u.id, u.name, u.email, d.specialization, d.experience_years, h.name, d.verified
+       GROUP BY u.id, u.name, u.email, d.specialization, d.experience_years, d.hospital_id, h.name, h.address, h.latitude, h.longitude, d.verified
        ORDER BY rating DESC, review_count DESC
        LIMIT 10`
     );

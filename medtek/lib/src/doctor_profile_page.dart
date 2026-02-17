@@ -7,6 +7,7 @@ import '../services/session_service.dart';
 import '../services/api_service.dart';
 import 'auth_page.dart';
 import 'doctor_verification_screen.dart';
+import 'select_hospital_page.dart';
 
 class DoctorProfilePage extends StatefulWidget {
   const DoctorProfilePage({super.key});
@@ -144,14 +145,17 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Hospital info
-                _buildInfoCard(
-                  icon: Icons.local_hospital,
-                  label: 'Hospital',
-                  value: hospitalName,
+                // Hospital info with edit button
+                _buildHospitalCard(
+                  hospitalName: hospitalName,
+                  hospitalAddress: hospitalAddress.isNotEmpty ? hospitalAddress : null,
                   theme: theme,
                   isDark: isDark,
-                  subtitle: hospitalAddress.isNotEmpty ? hospitalAddress : null,
+                  onEdit: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SelectHospitalPage(isEditMode: true)),
+                    );
+                  },
                 ),
                 const SizedBox(height: 12),
 
@@ -439,6 +443,113 @@ class _DoctorProfilePageState extends State<DoctorProfilePage> {
                 ],
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Hospital card with edit button
+  Widget _buildHospitalCard({
+    required String hospitalName,
+    String? hospitalAddress,
+    required ThemeData theme,
+    required bool isDark,
+    required VoidCallback onEdit,
+  }) {
+    final hasHospital = hospitalName != 'No hospital assigned';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: hasHospital
+              ? (isDark ? Colors.white10 : Colors.grey.shade200)
+              : Colors.orange.shade300,
+          width: hasHospital ? 1 : 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? Colors.black26 : Colors.grey.shade100,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: hasHospital
+                  ? (isDark ? Colors.red.withOpacity(0.1) : Colors.red.shade50)
+                  : Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.local_hospital,
+              color: hasHospital ? Colors.red.shade700 : Colors.orange.shade700,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hospital',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  hospitalName,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
+                  ),
+                ),
+                if (hospitalAddress != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    hospitalAddress,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: theme.colorScheme.onSurfaceVariant.withOpacity(0.8),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (!hasHospital) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Tap to set your hospital location',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.orange.shade700,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // Edit button
+          IconButton(
+            onPressed: onEdit,
+            icon: Icon(
+              hasHospital ? Icons.edit_location_alt : Icons.add_location_alt,
+              color: hasHospital ? Colors.red.shade600 : Colors.orange.shade600,
+            ),
+            tooltip: hasHospital ? 'Change Hospital' : 'Set Hospital',
           ),
         ],
       ),

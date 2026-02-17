@@ -13,6 +13,7 @@ const hospitalsRouter = require('./routes/hospitals');
 const ridesRouter = require('./routes/rides');
 const appointmentsRouter = require('./routes/appointments');
 const doctorsRoutes = require('./routes/doctors');
+const driversRouter = require('./routes/drivers');
 const authMiddleware = require('./middleware/auth');
 const medicalReportsRouter = require('./routes/medical-reports');
 
@@ -58,7 +59,7 @@ async function query(text, params) {
 // ✅ Add this route if you don't have it
 // index.js or routes/users.js
 
-// ✅ GET /users/me - COMPLETE VERSION
+// ✅ GET /users/me - COMPLETE VERSION (Supports doctors and lab_assistants)
 app.get('/users/me', authMiddleware, async (req, res) => {
   console.log('📡 GET /users/me called');
   console.log('   User ID:', req.user.id);
@@ -66,7 +67,7 @@ app.get('/users/me', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 
-    // ✅ Query with LEFT JOIN to get doctor data
+    // ✅ Query with LEFT JOIN to get doctor data AND lab assistant hospital
     const result = await pool.query(
       `SELECT 
         u.id,
@@ -74,19 +75,21 @@ app.get('/users/me', authMiddleware, async (req, res) => {
         u.email,
         u.role,
         u.profile_picture,
+        u.assigned_hospital_id,
         d.specialization,
         d.experience_years,
         d.about,
         d.verified,
-        h.id as hospital_id,
-        h.name as hospital_name,
-        h.address as hospital_address,
-        h.city as hospital_city,
-        h.latitude,
-        h.longitude
+        COALESCE(h_doc.id, h_lab.id) as hospital_id,
+        COALESCE(h_doc.name, h_lab.name) as hospital_name,
+        COALESCE(h_doc.address, h_lab.address) as hospital_address,
+        COALESCE(h_doc.city, h_lab.city) as hospital_city,
+        COALESCE(h_doc.latitude, h_lab.latitude) as latitude,
+        COALESCE(h_doc.longitude, h_lab.longitude) as longitude
        FROM users u
        LEFT JOIN doctors d ON u.id = d.user_id
-       LEFT JOIN hospitals h ON d.hospital_id = h.id
+       LEFT JOIN hospitals h_doc ON d.hospital_id = h_doc.id
+       LEFT JOIN hospitals h_lab ON u.assigned_hospital_id = h_lab.id
        WHERE u.id = $1`,
       [userId]
     );
@@ -103,8 +106,6 @@ app.get('/users/me', authMiddleware, async (req, res) => {
     console.log('✅ Raw user data:');
     console.log('   Name:', user.name);
     console.log('   Role:', user.role);
-    console.log('   Specialization:', user.specialization);
-    console.log('   Experience:', user.experience_years);
     console.log('   Hospital ID:', user.hospital_id);
     console.log('   Hospital Name:', user.hospital_name);
 
@@ -124,6 +125,7 @@ app.get('/users/me', authMiddleware, async (req, res) => {
       verified: user.verified,
       selected_hospital_id: user.hospital_id,
       selected_hospital_name: user.hospital_name,
+      assigned_hospital_id: user.assigned_hospital_id, // ✅ For lab assistants
       hospital: user.hospital_id ? {
         id: user.hospital_id,
         name: user.hospital_name,
@@ -161,7 +163,8 @@ app.post('/auth/register', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    if (!['patient', 'doctor', 'admin', 'driver'].includes(role)) {
+    // ✅ Allowed roles: patient, doctor, admin, driver, lab_assistant
+    if (!['patient', 'doctor', 'admin', 'driver', 'lab_assistant'].includes(role)) {
       console.error('❌ Invalid role:', role);
       return res.status(400).json({ error: 'Invalid role' });
     }
@@ -363,9 +366,11 @@ app.use('/appointments', appointmentsRouter);
 app.use('/verification', require('./routes/verification'));
 app.use('/verification-v2', require('./routes/verification_v2')); // ✅ NEW POC ROUTE 
 app.use('/doctors', doctorsRoutes);
+app.use('/drivers', driversRouter);
 app.use('/activities', require('./routes/activities')); // ✅ NEW ACTIVITIES ROUTE
 app.use('/ai', require('./routes/ai')); // ✅ NEW AI ROUTE (Gemini)
 app.use('/medical-reports', authMiddleware, medicalReportsRouter);
+app.use('/lab', require('./routes/lab')); // ✅ NEW LAB ASSISTANT ROUTE
 
 // ---------- SERVER BOOT ----------
 

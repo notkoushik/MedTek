@@ -1,11 +1,14 @@
 // lib/src/hospital_detail_page.dart
 import 'dart:math';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
+import 'package:http/http.dart' as http;
 
 import '../services/api_service.dart';
 import 'appointment_booking_page.dart';
+import 'doctor_detail_page.dart';
 import '../screens/rider/ride_booking_screen.dart';
 
 class HospitalDetailPage extends StatefulWidget {
@@ -179,9 +182,112 @@ class _HospitalDetailPageState extends State<HospitalDetailPage> {
           circleOpacity: 0.3,
         );
         await circleManager.create(userCircle);
+        
+        // Add route line from user to hospital
+        await _addRouteLine(hospitalLat, hospitalLng);
       }
     } catch (e) {
       debugPrint('Error adding marker: $e');
+    }
+  }
+
+  // Draw a soft, clean route line from user to hospital
+  Future<void> _addRouteLine(double hospitalLat, double hospitalLng) async {
+    if (_mapboxMap == null || _userPosition == null) return;
+    
+    try {
+      // Fetch route from Mapbox Directions API
+      final accessToken = 'pk.eyJ1Ijoic3Jpa2FrcyIsImEiOiJjbTU5ZHBqZ2QxdGVrMnFvaGc3MXRlZjV1In0.1WWDNzjyDZ3maqSS2qXWLQ';
+      final url = 'https://api.mapbox.com/directions/v5/mapbox/driving/'
+          '${_userPosition!.longitude},${_userPosition!.latitude};'
+          '$hospitalLng,$hospitalLat'
+          '?geometries=geojson&overview=full&access_token=$accessToken';
+      
+      final response = await http.get(Uri.parse(url));
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final routes = data['routes'] as List;
+        
+        if (routes.isNotEmpty) {
+          final geometry = routes[0]['geometry'];
+          final coordinates = geometry['coordinates'] as List;
+          
+          // Create polyline coordinates
+          final lineCoords = coordinates.map((coord) => 
+            Position(coord[0].toDouble(), coord[1].toDouble())
+          ).toList();
+          
+          // Add the route as a GeoJSON source and layer
+          final geoJsonSource = GeoJsonSource(
+            id: 'route-source',
+            data: jsonEncode({
+              'type': 'Feature',
+              'properties': {},
+              'geometry': {
+                'type': 'LineString',
+                'coordinates': coordinates,
+              }
+            }),
+          );
+          
+          await _mapboxMap!.style.addSource(geoJsonSource);
+          
+          // Add a soft, clean line layer
+          final lineLayer = LineLayer(
+            id: 'route-layer',
+            sourceId: 'route-source',
+            lineColor: const Color(0xFF4ECDC4).value, // Soft teal
+            lineWidth: 4.0,
+            lineOpacity: 0.8,
+            lineCap: LineCap.ROUND,
+            lineJoin: LineJoin.ROUND,
+          );
+          
+          await _mapboxMap!.style.addLayer(lineLayer);
+          
+          // Fit camera to show the entire route
+          final bounds = CoordinateBounds(
+            southwest: Point(coordinates: Position(
+              min(_userPosition!.longitude, hospitalLng),
+              min(_userPosition!.latitude, hospitalLat),
+            )),
+            northeast: Point(coordinates: Position(
+              max(_userPosition!.longitude, hospitalLng),
+              max(_userPosition!.latitude, hospitalLat),
+            )),
+            infiniteBounds: false,
+          );
+          
+          await _mapboxMap!.flyTo(
+            CameraOptions(
+              center: Point(coordinates: Position(
+                (_userPosition!.longitude + hospitalLng) / 2,
+                (_userPosition!.latitude + hospitalLat) / 2,
+              )),
+              zoom: 12.0,
+            ),
+            MapAnimationOptions(duration: 1000),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error adding route: $e');
+      // Fallback: draw a simple straight line
+      try {
+        final polylineManager = await _mapboxMap!.annotations.createPolylineAnnotationManager();
+        await polylineManager.create(PolylineAnnotationOptions(
+          geometry: LineString(coordinates: [
+            Position(_userPosition!.longitude, _userPosition!.latitude),
+            Position(hospitalLng, hospitalLat),
+          ]),
+          lineColor: const Color(0xFF4ECDC4).value,
+          lineWidth: 3.0,
+          lineOpacity: 0.7,
+        ));
+      } catch (e2) {
+        debugPrint('Fallback route error: $e2');
+      }
     }
   }
 
@@ -243,6 +349,24 @@ class _HospitalDetailPageState extends State<HospitalDetailPage> {
         backgroundColor: Colors.red,
         foregroundColor: Colors.white,
         elevation: 0,
+        leading: Container(
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, size: 18, color: Colors.red),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -345,7 +469,9 @@ class _HospitalDetailPageState extends State<HospitalDetailPage> {
                         const Text(
                           'Your Location',
                           style: TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 14),
+                              fontWeight: FontWeight.w600, 
+                              fontSize: 14,
+                              color: Color(0xFF1E3A5F)), // Dark blue
                         ),
                         const SizedBox(height: 4),
                         Text(
@@ -409,7 +535,9 @@ class _HospitalDetailPageState extends State<HospitalDetailPage> {
                           Text(
                             name.toString(),
                             style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 18),
+                                fontWeight: FontWeight.bold, 
+                                fontSize: 18,
+                                color: Color(0xFF1F2937)), // Dark gray
                           ),
                           if (_distance != null) ...[
                             const SizedBox(height: 4),
@@ -602,74 +730,91 @@ class _DoctorsList extends StatelessWidget {
             final name = doctor['name']?.toString() ?? 'Doctor';
             final specialty = doctor['specialty']?.toString() ?? 'General';
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey[300]!),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.person,
-                        size: 28, color: Colors.red),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Dr. $name',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.medical_information,
-                                size: 16, color: Colors.red),
-                            const SizedBox(width: 6),
-                            Text(
-                              specialty,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+            return InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DoctorDetailPage(
+                      doctor: doctor,
+                      hospital: hospital,
                     ),
                   ),
-                  FilledButton(
-                    onPressed: () => _bookAppointment(context, doctor),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 12,
+                );
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey[300]!),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Hero(
+                      tag: 'doctor_${doctor['id']}',
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.person,
+                            size: 28, color: Colors.red),
                       ),
                     ),
-                    child: const Text('Book'),
-                  ),
-                ],
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Dr. $name',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(Icons.medical_information,
+                                  size: 16, color: Colors.red),
+                              const SizedBox(width: 6),
+                              Text(
+                                specialty,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    FilledButton(
+                      onPressed: () => _bookAppointment(context, doctor),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                      ),
+                      child: const Text('Book'),
+                    ),
+                  ],
+                ),
               ),
             );
           },

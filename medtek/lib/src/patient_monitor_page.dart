@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'patient_detail_page.dart';
+import '../services/api_service.dart';
 
 class PatientMonitorPage extends StatefulWidget {
   final Map<String, dynamic> patient;
@@ -12,6 +13,8 @@ class PatientMonitorPage extends StatefulWidget {
 
 class _PatientMonitorPageState extends State<PatientMonitorPage> {
   late List<Map<String, dynamic>> _labTests;
+  final _api = ApiService();
+  bool _completing = false;
 
   @override
   void initState() {
@@ -325,21 +328,45 @@ class _PatientMonitorPageState extends State<PatientMonitorPage> {
                     child: Builder(
                       builder: (context) {
                         final allDone = _labTests.every((t) => t['isDone'] == true);
+                        final reportId = widget.patient['report_id']?.toString() ?? '';
                         
                         return ElevatedButton.icon(
-                          onPressed: allDone ? () {
-                             final patientData = widget.patient.map((key, value) => MapEntry(key, value?.toString() ?? ''));
-
-                             Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => PatientDetailPage(patient: patientData),
-                              ),
-                            );
-                          } : null, // Disabled if not done
-                          icon: Icon(allDone ? Icons.check_circle : Icons.hourglass_empty),
-                          label: Text(allDone ? 'Check Out / Prescribe' : 'Patient Testing...'),
+                          onPressed: (allDone && !_completing && reportId.isNotEmpty) ? () async {
+                            setState(() => _completing = true);
+                            
+                            final success = await _api.completeConsultation(reportId);
+                            
+                            if (!mounted) return;
+                            setState(() => _completing = false);
+                            
+                            if (success) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('✅ Consultation completed successfully!'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                              Navigator.of(context).pop(true); // Return to previous screen
+                            } else {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('❌ Failed to complete consultation'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          } : null,
+                          icon: _completing 
+                              ? const SizedBox(
+                                  width: 18, height: 18,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : Icon(allDone ? Icons.check_circle : Icons.hourglass_empty),
+                          label: Text(_completing 
+                              ? 'Completing...' 
+                              : allDone ? 'Complete Consultation' : 'Tests in Progress...'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: allDone ? Colors.blue.shade600 : Colors.grey.shade400,
+                            backgroundColor: allDone ? Colors.green.shade600 : Colors.grey.shade400,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

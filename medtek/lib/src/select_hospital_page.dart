@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
@@ -5,12 +6,15 @@ import 'package:provider/provider.dart';
 
 import '../models/hospital.dart';
 import '../services/api_service.dart';
+import '../services/maps_service.dart';
 import '../services/session_service.dart';
 import 'doctor_details_dialog.dart';
 import 'doctor_onboarding_guard.dart';
 
 class SelectHospitalPage extends StatefulWidget {
-  const SelectHospitalPage({super.key});
+  final bool isEditMode; // When true, skip the existing hospital check
+  
+  const SelectHospitalPage({super.key, this.isEditMode = false});
 
   @override
   State<SelectHospitalPage> createState() => _SelectHospitalPageState();
@@ -30,26 +34,51 @@ class _SelectHospitalPageState extends State<SelectHospitalPage> {
 
   final TextEditingController _searchCtrl = TextEditingController();
   final ApiService _api = ApiService();
+  // Google Maps API key for Places search
+  final MapsService _mapsService = MapsService(
+    apiKey: 'AIzaSyDZkvVC-1kwBR5_GwiBRiUEjNclpu0W9KY',
+  );
 
   @override
   void initState() {
     super.initState();
-    _checkExistingHospital();
+    // If in edit mode, skip the hospital check and go straight to location
+    if (widget.isEditMode) {
+      _initLocation();
+    } else {
+      _checkExistingHospital();
+    }
   }
 
   Future<void> _checkExistingHospital() async {
     try {
-      // Use the API helper you already have.
-      final myHospital = await _api.getMyHospital();
+      final session = context.read<SessionService>();
+      final role = session.user?['role'];
 
-      if (myHospital != null && myHospital['hospital'] != null) {
-        debugPrint('✅ Doctor already has hospital selected -> go to Guard');
+      if (role == 'lab_assistant') {
+        // Check local session for hospital
+        if (session.user?['selected_hospital_id'] != null || session.user?['hospital'] != null) {
+          debugPrint('✅ Lab Assistant has hospital -> Dashboard');
+          if (!mounted) return;
+          Navigator.of(context).pushReplacementNamed('/lab-dashboard');
+          return;
+        }
 
-        if (!mounted) return;
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const DoctorOnboardingGuard()),
-        );
+        // Fetch existing hospitals list (Strict Mode)
+        await _fetchExistingHospitals();
         return;
+      } else {
+        // Doctor check
+        final myHospital = await _api.getMyHospital();
+        if (myHospital != null && myHospital['hospital'] != null) {
+          debugPrint('✅ Doctor already has hospital selected -> go to Guard');
+
+          if (!mounted) return;
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const DoctorOnboardingGuard()),
+          );
+          return;
+        }
       }
 
       debugPrint('⚠️ No hospital selected, showing selection screen');
@@ -59,6 +88,109 @@ class _SelectHospitalPageState extends State<SelectHospitalPage> {
       await _initLocation();
     }
   }
+
+  Future<void> _fetchExistingHospitals() async {
+    setState(() => _loading = true);
+    try {
+      final list = await _api.getAllHospitals();
+      if (!mounted) return;
+      setState(() {
+        _hospitals = list.map((h) => Hospital.fromJson(h)).toList();
+        _loading = false;
+        // Don't set _searching to true, just show list
+      });
+    } catch (e) {
+      debugPrint('Fetch hospitals error: $e');
+      setState(() => _loading = false);
+    }
+  }
+
+  // ... (keeping _initLocation etc unchanged)
+
+  Future<void> _confirmSelection() async {
+    if (_selectedHospital == null) return;
+
+    setState(() => _saving = true);
+
+    try {
+      final session = context.read<SessionService>();
+      final role = session.user?['role'];
+      final body = {
+        'hospital_id': _selectedHospital!.id, // ✅ Send DB ID if available
+        'google_place_id': _selectedHospital!.id,
+        'name': _selectedHospital!.name,
+        'address': _selectedHospital!.address,
+        'city': 'India',
+        'latitude': _selectedHospital!.latitude,
+        'longitude': _selectedHospital!.longitude,
+      };
+
+      if (role == 'lab_assistant') {
+        await _api.assignHospitalToUser(body);
+      } else {
+        await _api.selectHospitalForDoctor(body);
+      }
+
+      debugPrint('✅ Hospital selection saved');
+
+      if (!mounted) return;
+
+      // 2) Doctor details dialog (only on first setup, not edit mode)
+      if (!widget.isEditMode && role == 'doctor') {
+        final doctorId = session.user?['id']?.toString() ?? '';
+
+        if (doctorId.isNotEmpty) {
+          await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => DoctorDetailsDialog(doctorId: doctorId),
+          );
+        }
+      }
+
+      // 3) Refresh /users/me so guard reads latest values
+      await session.fetchMe(_api);
+
+      if (!mounted) return;
+
+      // 4) Navigate based on mode
+      if (widget.isEditMode) {
+        // In edit mode, just pop back to profile
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Hospital updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.of(context).pop();
+      } else {
+        if (role == 'lab_assistant') {
+           Navigator.of(context).pushReplacementNamed('/lab-dashboard');
+        } else {
+           Navigator.of(context).pushAndRemoveUntil(
+             MaterialPageRoute(builder: (_) => const DoctorOnboardingGuard()),
+             (_) => false,
+           );
+        }
+      }
+    } catch (e) {
+      debugPrint('Confirm error: $e');
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  // ... (keeping _initLocation etc unchanged)
+
+
 
   Future<void> _initLocation() async {
     geo.Position fallback() => geo.Position(
@@ -105,6 +237,9 @@ class _SelectHospitalPageState extends State<SelectHospitalPage> {
         _currentPosition = pos;
         _loading = false;
       });
+      
+      // Auto-load nearby hospitals after getting location
+      _loadNearbyHospitals();
     } catch (e) {
       debugPrint('Location error: $e');
       setState(() {
@@ -114,8 +249,46 @@ class _SelectHospitalPageState extends State<SelectHospitalPage> {
     }
   }
 
+  // Auto-load nearby hospitals using Google Places API
+  Future<void> _loadNearbyHospitals() async {
+    if (_currentPosition == null) return;
+
+    setState(() {
+      _searching = true;
+      _hospitals = [];
+    });
+
+    try {
+      final results = await _mapsService.searchNearbyHospitals(
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+        radius: 10000, // 10km radius
+      );
+
+      final hospitals = results.map((r) => Hospital.fromJson(r)).toList();
+
+      setState(() {
+        _hospitals = hospitals;
+        _searching = false;
+      });
+
+      if (hospitals.isNotEmpty) {
+        await _showHospitalMarkers(hospitals);
+      }
+    } catch (e) {
+      debugPrint('Load nearby error: $e');
+      setState(() => _searching = false);
+    }
+  }
+
   Future<void> _searchHospitals(String query) async {
-    if (query.isEmpty || _currentPosition == null) return;
+    if (_currentPosition == null) return;
+    
+    // If query is empty, load nearby hospitals
+    if (query.trim().isEmpty) {
+      _loadNearbyHospitals();
+      return;
+    }
 
     setState(() {
       _searching = true;
@@ -124,19 +297,22 @@ class _SelectHospitalPageState extends State<SelectHospitalPage> {
     });
 
     try {
-      final results = await _api.searchHospitals(
-        query: query,
-        lat: _currentPosition!.latitude,
-        lng: _currentPosition!.longitude,
+      // Use Google Places Text Search API
+      final results = await _mapsService.searchHospitalsByText(
+        query,
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
       );
 
+      final hospitals = results.map((r) => Hospital.fromJson(r)).toList();
+
       setState(() {
-        _hospitals = results;
+        _hospitals = hospitals;
         _searching = false;
       });
 
-      if (results.isNotEmpty) {
-        await _showHospitalMarkers(results);
+      if (hospitals.isNotEmpty) {
+        await _showHospitalMarkers(hospitals);
       }
     } catch (e) {
       debugPrint('Search error: $e');
@@ -147,6 +323,22 @@ class _SelectHospitalPageState extends State<SelectHospitalPage> {
         SnackBar(content: Text('Search failed: $e')),
       );
     }
+  }
+
+  // Calculate distance between user and hospital
+  double _calculateDistance(Hospital hospital) {
+    if (_currentPosition == null) return 0;
+    
+    const earthRadius = 6371.0; // km
+    final lat1 = _currentPosition!.latitude * (pi / 180);
+    final lat2 = hospital.latitude * (pi / 180);
+    final dLat = (hospital.latitude - _currentPosition!.latitude) * (pi / 180);
+    final dLon = (hospital.longitude - _currentPosition!.longitude) * (pi / 180);
+
+    final a = sin(dLat / 2) * sin(dLat / 2) +
+        cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2);
+    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
+    return earthRadius * c;
   }
 
   Future<void> _showHospitalMarkers(List<Hospital> hospitals) async {
@@ -180,65 +372,11 @@ class _SelectHospitalPageState extends State<SelectHospitalPage> {
     }
   }
 
-  Future<void> _confirmSelection() async {
-    if (_selectedHospital == null) return;
 
-    setState(() => _saving = true);
-
-    try {
-      // 1) Save hospital selection (address omitted because Hospital has no address)
-      await _api.selectHospitalForDoctor({
-        'google_place_id': _selectedHospital!.id,
-        'name': _selectedHospital!.name,
-        'city': 'India',
-        'latitude': _selectedHospital!.latitude,
-        'longitude': _selectedHospital!.longitude,
-      });
-
-      debugPrint('✅ Hospital selection saved');
-
-      if (!mounted) return;
-
-      // 2) Doctor details dialog (optional, guard will re-check anyway)
-      final session = context.read<SessionService>();
-      final doctorId = session.user?['id']?.toString() ?? '';
-
-      if (doctorId.isNotEmpty) {
-        await showDialog<bool>(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => DoctorDetailsDialog(doctorId: doctorId),
-        );
-      }
-
-      // 3) Refresh /users/me so guard reads latest values
-      await session.fetchMe(_api);
-
-      if (!mounted) return;
-
-      // 4) Single navigation: ALWAYS go through guard
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const DoctorOnboardingGuard()),
-            (_) => false,
-      );
-    } catch (e) {
-      debugPrint('Confirm error: $e');
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading || _currentPosition == null) {
+    if (_loading) {
       return const Scaffold(
         body: Center(
           child: Column(
@@ -247,6 +385,129 @@ class _SelectHospitalPageState extends State<SelectHospitalPage> {
               CircularProgressIndicator(color: Colors.red),
               SizedBox(height: 16),
               Text('Checking hospital selection...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final session = context.watch<SessionService>();
+    final role = session.user?['role'];
+
+    // ✅ Lab Assistant View: Simple List "Pop Down"
+    if (role == 'lab_assistant') {
+      return Scaffold(
+        appBar: AppBar(
+          title: const Text('Select Your Facility'),
+          backgroundColor: Colors.red,
+          foregroundColor: Colors.white,
+          automaticallyImplyLeading: false,
+        ),
+        body: _hospitals.isEmpty 
+          ? const Center(child: Text('No hospitals available.'))
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _hospitals.length,
+              itemBuilder: (context, index) {
+                final hospital = _hospitals[index];
+                final isSelected = _selectedHospital?.id == hospital.id;
+                
+                return Card(
+                  elevation: isSelected ? 4 : 1,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: isSelected ? Colors.red : Colors.grey.shade200, 
+                      width: isSelected ? 2 : 1
+                    ),
+                  ),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  child: InkWell(
+                    onTap: () {
+                      setState(() => _selectedHospital = hospital);
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: isSelected ? Colors.red.shade50 : Colors.grey.shade100,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.local_hospital,
+                              color: isSelected ? Colors.red : Colors.grey,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  hospital.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                if (hospital.address.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    hospital.address,
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          if (isSelected)
+                            const Icon(Icons.check_circle, color: Colors.red),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+         bottomNavigationBar: SafeArea(
+           child: Padding(
+             padding: const EdgeInsets.all(16),
+             child: ElevatedButton(
+               onPressed: (_selectedHospital == null || _saving) ? null : _confirmSelection,
+               style: ElevatedButton.styleFrom(
+                 backgroundColor: Colors.red,
+                 foregroundColor: Colors.white,
+                 padding: const EdgeInsets.symmetric(vertical: 16),
+                 shape: RoundedRectangleBorder(
+                   borderRadius: BorderRadius.circular(12),
+                 ),
+               ),
+               child: _saving 
+                 ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                 : const Text('Confirm Selection', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+             ),
+           ),
+         ),
+      );
+    }
+
+    // Doctor View: Fallback to existing logic if location is null
+    if (_currentPosition == null) {
+       return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: Colors.red),
+              SizedBox(height: 16),
+              Text('Acquiring location...'),
             ],
           ),
         ),
@@ -367,7 +628,7 @@ class _SelectHospitalPageState extends State<SelectHospitalPage> {
                               );
                             },
                             child: Container(
-                              width: 200,
+                              width: 220,
                               margin: const EdgeInsets.only(right: 8),
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
@@ -384,8 +645,8 @@ class _SelectHospitalPageState extends State<SelectHospitalPage> {
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
+                                  // Hospital name
                                   Text(
                                     hospital.name,
                                     style: TextStyle(
@@ -399,19 +660,45 @@ class _SelectHospitalPageState extends State<SelectHospitalPage> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 4),
-                                  Text(
-                                    'Lat: ${hospital.latitude.toStringAsFixed(4)}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade600,
+                                  // Address
+                                  if (hospital.address.isNotEmpty)
+                                    Text(
+                                      hospital.address,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                  ),
-                                  Text(
-                                    'Lng: ${hospital.longitude.toStringAsFixed(4)}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade600,
-                                    ),
+                                  const Spacer(),
+                                  // Distance and rating row
+                                  Row(
+                                    children: [
+                                      Icon(Icons.location_on, size: 12, color: Colors.red.shade400),
+                                      const SizedBox(width: 2),
+                                      Text(
+                                        '${_calculateDistance(hospital).toStringAsFixed(1)} km',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.red.shade700,
+                                        ),
+                                      ),
+                                      if (hospital.rating > 0) ...[
+                                        const Spacer(),
+                                        Icon(Icons.star, size: 12, color: Colors.amber.shade600),
+                                        const SizedBox(width: 2),
+                                        Text(
+                                          hospital.rating.toStringAsFixed(1),
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.amber.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                 ],
                               ),
@@ -455,13 +742,51 @@ class _SelectHospitalPageState extends State<SelectHospitalPage> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      // Distance badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.near_me, size: 14, color: Colors.red.shade700),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${_calculateDistance(_selectedHospital!).toStringAsFixed(1)} km',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                                color: Colors.red.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    'Coordinates: ${_selectedHospital!.latitude.toStringAsFixed(4)}, ${_selectedHospital!.longitude.toStringAsFixed(4)}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                  ),
+                  // Address
+                  if (_selectedHospital!.address.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 32),
+                      child: Row(
+                        children: [
+                          Icon(Icons.place, size: 14, color: Colors.grey.shade500),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              _selectedHospital!.address,
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,

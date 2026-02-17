@@ -166,6 +166,16 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const DoctorOnboardingGuard()),
       );
+    } else if (role == 'lab_assistant') {
+      final session = context.read<SessionService>();
+      final user = session.user;
+      if (user != null && user['selected_hospital_id'] == null && user['hospital'] == null) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const SelectHospitalPage()),
+        );
+      } else {
+        Navigator.of(context).pushReplacementNamed('/lab-dashboard');
+      }
     } else {
       // Check if patient profile is complete
       try {
@@ -735,29 +745,38 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.grey.shade300),
       ),
-      child: DropdownButtonFormField<String>(
-        value: role,
-        dropdownColor: Colors.white,
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-          icon: Icon(Icons.badge_outlined, color: Color(0xFFD32F2F), size: 22),
-          labelText: 'Select Role',
-          labelStyle: TextStyle(color: Colors.grey),
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          canvasColor: Colors.white,
         ),
-        style: const TextStyle(color: Colors.black87, fontSize: 16),
-        items: const [
-          DropdownMenuItem(
-            value: 'patient',
-            child: Text('Patient'),
+        child: DropdownButtonFormField<String>(
+          value: role,
+          dropdownColor: Colors.white,
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            icon: Icon(Icons.badge_outlined, color: Color(0xFFD32F2F), size: 22),
+            labelText: 'Select Role',
+            labelStyle: TextStyle(color: Colors.grey),
           ),
-          DropdownMenuItem(
-            value: 'doctor',
-            child: Text('Doctor'),
-          ),
-        ],
-        onChanged: (v) {
-          setState(() => role = v ?? 'patient');
-        },
+          style: const TextStyle(color: Colors.black87, fontSize: 16),
+          items: [
+            DropdownMenuItem(
+              value: 'patient',
+              child: Text('Patient', style: TextStyle(color: Colors.grey.shade800)),
+            ),
+            DropdownMenuItem(
+              value: 'doctor',
+              child: Text('Doctor', style: TextStyle(color: Colors.grey.shade800)),
+            ),
+            DropdownMenuItem(
+              value: 'lab_assistant',
+              child: Text('Lab Assistant', style: TextStyle(color: Colors.grey.shade800)),
+            ),
+          ],
+          onChanged: (v) {
+            setState(() => role = v ?? 'patient');
+          },
+        ),
       ),
     );
   }
@@ -783,6 +802,70 @@ class _AuthPageState extends State<AuthPage> with TickerProviderStateMixin {
                 hintText: '192.168.1.151',
               ),
               keyboardType: TextInputType.number, 
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: const Icon(Icons.wifi_find_rounded),
+                label: const Text('Test Connection'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade50,
+                  foregroundColor: Colors.blue.shade700,
+                  elevation: 0,
+                ),
+                onPressed: () async {
+                   final testIp = ipCtrl.text.trim();
+                   final messenger = ScaffoldMessenger.of(context);
+                   Navigator.pop(context); // Close dialog to show snackbar
+                   
+                   messenger.showSnackBar(
+                     const SnackBar(
+                       content: Text('Testing connection...'),
+                       duration: Duration(seconds: 1),
+                     ),
+                   );
+
+                   try {
+                     final dio = Dio(BaseOptions(
+                       baseUrl: 'http://$testIp:4000',
+                       connectTimeout: const Duration(seconds: 5),
+                     ));
+                     final res = await dio.get('/');
+                     messenger.showSnackBar(
+                       SnackBar(
+                         content: Text('✅ Connected! Status: ${res.statusCode}'),
+                         backgroundColor: Colors.green,
+                         duration: const Duration(seconds: 3),
+                       ),
+                     );
+                   } on DioException catch (e) {
+                     String errorMsg = 'Connection Failed';
+                     if (e.type == DioExceptionType.connectionTimeout) {
+                       errorMsg = 'Timeout: Check Firewall';
+                     } else if (e.type == DioExceptionType.connectionError) {
+                       errorMsg = 'Connection Refused: Check IP/Port';
+                     } else {
+                       errorMsg = 'Error: ${e.message}';
+                     }
+                     
+                     messenger.showSnackBar(
+                       SnackBar(
+                         content: Text('❌ $errorMsg'),
+                         backgroundColor: Colors.red,
+                         duration: const Duration(seconds: 5),
+                       ),
+                     );
+                   } catch (e) {
+                      messenger.showSnackBar(
+                       SnackBar(
+                         content: Text('❌ Error: $e'),
+                         backgroundColor: Colors.red,
+                       ),
+                     );
+                   }
+                },
+              ),
             ),
           ],
         ),

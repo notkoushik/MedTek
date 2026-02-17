@@ -9,6 +9,8 @@ import '../services/session_service.dart';
 import 'profile_page.dart';
 import 'triage_page.dart';
 import 'hospital_detail_page.dart';
+import 'doctor_detail_page.dart';
+import 'ai_pill_detection_page.dart';
 
 class PatientDashboard extends StatefulWidget {
   const PatientDashboard({super.key});
@@ -205,6 +207,74 @@ class _PatientDashboardState extends State<PatientDashboard> {
                       ),
                     ),
                     Icon(Icons.tune, color: colorScheme.primary, size: 20),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // ✅ AI Pill Identification Card (New Feature)
+            InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AiPillDetectionPage()),
+                );
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.teal.shade400, Colors.teal.shade700],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.teal.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.center_focus_strong, color: Colors.white, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Identify My Pill',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'AI Safety Check & Interactions',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 18),
                   ],
                 ),
               ),
@@ -533,8 +603,22 @@ class _DoctorCard extends StatelessWidget {
       ),
       child: InkWell(
         onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Viewing $name\'s profile')),
+          // Build hospital object from doctor's hospital data (includes coordinates for ride booking)
+          final hospital = {
+            'id': doctor['hospital_id'],
+            'name': doctor['hospital_name'] ?? 'Hospital',
+            'address': doctor['hospital_address'] ?? '',
+            'latitude': doctor['hospital_latitude'],
+            'longitude': doctor['hospital_longitude'],
+          };
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => DoctorDetailPage(
+                doctor: doctor,
+                hospital: hospital,
+              ),
+            ),
           );
         },
         borderRadius: BorderRadius.circular(16),

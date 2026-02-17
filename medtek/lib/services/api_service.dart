@@ -1,5 +1,6 @@
 // lib/services/api_service.dart
 import 'dart:io';
+import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // ✅ Add this
 import 'session_service.dart';
@@ -10,7 +11,7 @@ class ApiService {
   // Use --dart-define=API_URL=http://your-prod-url.com when building
   static const String _defaultUrl = String.fromEnvironment(
     'API_URL', 
-    defaultValue: 'http://192.168.1.151:4000' // Dev fallback
+    defaultValue: 'http://192.168.1.56:4000' // Dev fallback
   );
   
   static String _baseUrl = _defaultUrl;
@@ -133,6 +134,37 @@ class ApiService {
     } catch (e) {
       print('Error fetching doctor appointments: $e');
       throw Exception('Failed to load appointments');
+    }
+  }
+
+  // Get pending appointment bookings for doctor to approve
+  Future<List<Map<String, dynamic>>> getPendingBookings(String doctorId) async {
+    try {
+      final response = await _dio.get('/appointments/pending?doctor_id=$doctorId');
+      if (response.statusCode == 200) {
+        return (response.data['appointments'] as List).cast<Map<String, dynamic>>();
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching pending bookings: $e');
+      return [];
+    }
+  }
+
+  // Doctor accepts or declines appointment booking
+  Future<Map<String, dynamic>?> updateAppointmentStatus(String appointmentId, String status) async {
+    try {
+      final response = await _dio.patch(
+        '/appointments/$appointmentId/status',
+        data: {'status': status},
+      );
+      if (response.statusCode == 200) {
+        return response.data as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      print('Error updating appointment status: $e');
+      return null;
     }
   }
 
@@ -386,6 +418,18 @@ class ApiService {
     await _dio.post('/doctors/select-hospital', data: body);
   }
 
+  // ✅ Assign hospital to generic user (Lab Assistant)
+  Future<void> assignHospitalToUser(Map<String, dynamic> body) async {
+    await _dio.post('/users/assign-hospital', data: body);
+  }
+
+  // ✅ Get all registered hospitals
+  Future<List<Map<String, dynamic>>> getAllHospitals() async {
+    final res = await _dio.get('/hospitals');
+    final list = res.data['hospitals'] as List;
+    return list.map((e) => e as Map<String, dynamic>).toList();
+  }
+
   Future<Map<String, dynamic>> getHospitalById(String hospitalId) async {
     final res = await _dio.get('/hospitals/$hospitalId');
     final data = res.data as Map<String, dynamic>?;
@@ -509,6 +553,17 @@ class ApiService {
       return true;
     } catch (e) {
       print('Error updating lab test status: $e');
+      return false;
+    }
+  }
+
+  // Doctor completes/finalizes a consultation
+  Future<bool> completeConsultation(String reportId) async {
+    try {
+      await _dio.patch('/medical-reports/$reportId/complete');
+      return true;
+    } catch (e) {
+      print('Error completing consultation: $e');
       return false;
     }
   }
@@ -689,8 +744,17 @@ class ApiService {
   Future<Map<String, dynamic>> createAppointment(
       Map<String, dynamic> appointmentData,
       ) async {
-    final res = await _dio.post('/appointments', data: appointmentData);
-    return res.data as Map<String, dynamic>;
+    try {
+      final res = await _dio.post('/appointments', data: appointmentData);
+      return res.data as Map<String, dynamic>;
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 409) {
+        // Duplicate appointment - already booked with this doctor on this date
+        throw Exception(e.response?.data?['error'] ?? 
+            'You already have an appointment with this doctor on this date');
+      }
+      rethrow;
+    }
   }
 
   Future<void> sendTriageResult({
@@ -733,6 +797,37 @@ class ApiService {
         'cloudinary_id': cloudinaryId,
       },
     );
+  }
+
+  // ---------- LAB ASSISTANT ----------
+
+  // Get pending tests for lab dashboard
+  Future<Map<String, dynamic>> getLabPendingTests() async {
+    final res = await _dio.get('/lab/pending-tests');
+    return res.data as Map<String, dynamic>;
+  }
+
+  // Mark sample collected for a specific test
+  Future<void> labCollectSample(int reportId, String testName) async {
+    await _dio.patch(
+      '/lab/test/$reportId/collect-sample',
+      data: {'testName': testName},
+    );
+  }
+
+  // Mark test as completed
+  Future<Map<String, dynamic>> labCompleteTest(int reportId, String testName) async {
+    final res = await _dio.patch(
+      '/lab/test/$reportId/complete',
+      data: {'testName': testName},
+    );
+    return res.data as Map<String, dynamic>;
+  }
+
+  // Get lab stats
+  Future<Map<String, dynamic>> getLabStats() async {
+    final res = await _dio.get('/lab/stats');
+    return res.data as Map<String, dynamic>;
   }
 
   // ---------- HOSPITALS NEARBY ----------
@@ -911,16 +1006,57 @@ class ApiService {
 
   // ---------- AI CHAT (Gemini) ----------
 
-  Future<String> sendChatMessage(String message, List<Map<String, String>> history) async {
+  Future<String> sendChatMessage(String message, List<Map<String, String>> history, {Map<String, dynamic>? userProfile}) async {
     try {
       final res = await _dio.post('/ai/chat', data: {
         'message': message,
         'history': history,
+        'userProfile': userProfile ?? {},
       });
       return res.data['reply']?.toString() ?? 'Sorry, I did not get a response.';
     } catch (e) {
       print('AI Chat Error: $e');
       throw Exception('Failed to get AI response');
+    }
+  }
+
+  // ---------- PILL IDENTIFICATION (Gemini Vision) ----------
+
+  Future<Map<String, dynamic>> checkPillSafety({
+    required File imageFile,
+    required List<String> currentMedications,
+  }) async {
+    try {
+      print('💊 Sending pill image to AI...');
+      
+      final formData = FormData.fromMap({
+        'pill_image': await MultipartFile.fromFile(
+          imageFile.path,
+          filename: 'pill_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        ),
+        // Send as JSON string to ensure backend receives it correctly
+        'current_meds': jsonEncode(currentMedications), 
+      });
+
+      final res = await _dio.post(
+        '/ai/identify-pill', 
+        data: formData,
+        options: Options(
+          headers: {'Content-Type': 'multipart/form-data'},
+          sendTimeout: const Duration(seconds: 60), // Vision AI might take time
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
+      
+      return res.data as Map<String, dynamic>;
+    } catch (e) {
+      print('❌ AI Pill Check Error: $e');
+      return {
+        'success': false,
+        'safe': false,
+        'message': 'Failed to analyze image. Please try again.',
+        'error': e.toString(),
+      };
     }
   }
 }

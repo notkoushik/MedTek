@@ -65,10 +65,10 @@ router.post('/login', async (req, res) => {
       email: user.email,
       role: user.role,
       profile_picture: user.profile_picture,
-      profile_picture_url: user.profile_picture 
+      profile_picture_url: user.profile_picture
         ? `/uploads/profile-pictures/${user.profile_picture}`
         : null,
-      selected_hospital_id: hospitalData?.id || null,
+      selected_hospital_id: hospitalData?.id || user.assigned_hospital_id || null,
       selected_hospital_name: hospitalData?.name || null,
       hospital: hospitalData, // ✅ Full hospital object
     };
@@ -95,7 +95,9 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'All fields required' });
     }
 
-    if (!['patient', 'doctor'].includes(role)) {
+    // ✅ Allowed roles: patient, doctor, lab_assistant
+    if (!['patient', 'doctor', 'lab_assistant'].includes(role)) {
+      console.log('❌ Invalid role:', role);
       return res.status(400).json({ error: 'Invalid role' });
     }
 

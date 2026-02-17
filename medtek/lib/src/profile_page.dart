@@ -8,6 +8,7 @@ import '../services/session_service.dart';
 import '../services/api_service.dart';
 import 'auth_page.dart';
 import 'patient_reports_page.dart';
+import 'settings_page.dart';
 
 class PatientProfilePage extends StatefulWidget {
   const PatientProfilePage({Key? key}) : super(key: key);
@@ -261,96 +262,143 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
+                ],
+                border: isDark ? Border.all(color: Colors.white10) : null,
+              ),
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: isDark ? Colors.blue.withOpacity(0.2) : const Color(0xFFE3F2FD),
+                      child: const Icon(Icons.history, color: Colors.blue),
+                    ),
+                    title: Text(
+                      'My Activities',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: colorScheme.onSurface,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Recent actions, appointments and posts',
+                      style: TextStyle(color: colorScheme.onSurfaceVariant),
+                    ),
+                    trailing: TextButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/activities');
+                      },
+                      child: const Text('View all'),
+                    ),
+                  ),
+                  const Divider(height: 8),
+                  if (_loadingActivities)
+                    const Padding(
+                      padding: EdgeInsets.all(12.0),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (activities.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12.0),
+                      child: Text(
+                        'No recent activities.',
+                        style: TextStyle(color: colorScheme.onSurfaceVariant),
+                      ),
+                    )
+                  else
+                    Column(
+                      children: activities.take(5).map((act) {
+                        final title = act['title'] ?? act['type'] ?? 'Activity';
+                        final subtitle = act['details'] ?? act['description'] ?? '';
+                        final rawDate = act['timestamp'] ?? act['created_at'] ?? '';
+                        String dateStr = '';
+                        try {
+                          dateStr = rawDate.toString();
+                        } catch (_) {
+                          dateStr = rawDate?.toString() ?? '';
+                        }
+
+                        return ListTile(
+                          dense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                          leading: Icon(Icons.circle, size: 12, color: colorScheme.primary.withOpacity(0.7)),
+                          title: Text(
+                            title.toString(),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: colorScheme.onSurface,
+                            ),
+                          ),
+                          subtitle: Text(
+                            subtitle.toString(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(color: colorScheme.onSurfaceVariant),
+                          ),
+                          trailing: Text(
+                            dateStr,
+                            style: TextStyle(
+                              color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                              fontSize: 12,
+                            ),
+                          ),
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Activity: $title')),
+                            );
+                          },
+                        );
+                      }).toList(),
+                    ),
+                ],
+              ),
+            );
+  }
+
+  Widget _buildSettingsSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: isDark ? Colors.black26 : Colors.red.shade100.withOpacity(0.10),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
         border: isDark ? Border.all(color: Colors.white10) : null,
       ),
       padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          ListTile(
-            leading: CircleAvatar(
-              backgroundColor: isDark ? Colors.blue.withOpacity(0.2) : const Color(0xFFE3F2FD),
-              child: const Icon(Icons.history, color: Colors.blue),
-            ),
-            title: Text(
-              'My Activities',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                color: colorScheme.onSurface,
-              ),
-            ),
-            subtitle: Text(
-              'Recent actions, appointments and posts',
-              style: TextStyle(color: colorScheme.onSurfaceVariant),
-            ),
-            trailing: TextButton(
-              onPressed: () {
-                Navigator.pushNamed(context, '/activities');
-              },
-              child: const Text('View all'),
-            ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: isDark ? Colors.grey.withOpacity(0.2) : Colors.grey.shade100,
+          child: const Icon(Icons.settings, color: Colors.grey),
+        ),
+        title: Text(
+          'Settings',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+            color: colorScheme.onSurface,
           ),
-          const Divider(height: 8),
-          if (_loadingActivities)
-            const Padding(
-              padding: EdgeInsets.all(12.0),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (activities.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12.0),
-              child: Text(
-                'No recent activities.',
-                style: TextStyle(color: colorScheme.onSurfaceVariant),
-              ),
-            )
-          else
-            Column(
-              children: activities.take(5).map((act) {
-                final title = act['title'] ?? act['type'] ?? 'Activity';
-                final subtitle = act['details'] ?? act['description'] ?? '';
-                final rawDate = act['timestamp'] ?? act['created_at'] ?? '';
-                String dateStr = '';
-                try {
-                  dateStr = rawDate.toString();
-                } catch (_) {
-                  dateStr = rawDate?.toString() ?? '';
-                }
-
-                return ListTile(
-                  dense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                  leading: Icon(Icons.circle, size: 12, color: colorScheme.primary.withOpacity(0.7)),
-                  title: Text(
-                    title.toString(),
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      color: colorScheme.onSurface,
-                    ),
-                  ),
-                  subtitle: Text(
-                    subtitle.toString(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: colorScheme.onSurfaceVariant),
-                  ),
-                  trailing: Text(
-                    dateStr,
-                    style: TextStyle(
-                      color: colorScheme.onSurfaceVariant.withOpacity(0.7),
-                      fontSize: 12,
-                    ),
-                  ),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Activity: $title')),
-                    );
-                  },
-                );
-              }).toList(),
-            ),
-        ],
+        ),
+        subtitle: Text(
+          'App preferences and configurations',
+          style: TextStyle(color: colorScheme.onSurfaceVariant),
+        ),
+        trailing: Icon(Icons.chevron_right, color: colorScheme.onSurfaceVariant),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SettingsPage()),
+          );
+        },
       ),
     );
   }
@@ -588,6 +636,10 @@ class _PatientProfilePageState extends State<PatientProfilePage> {
 
             // My Activities
             _buildActivitiesSection(context),
+            const SizedBox(height: 24),
+
+            // Settings
+            _buildSettingsSection(context),
             const SizedBox(height: 24),
 
             // Profile Details

@@ -107,7 +107,14 @@ class _DoctorPatientDashboardState extends State<DoctorPatientDashboard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _DoctorHeaderCard(doctorId: doctorId, api: api),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              // Pending Bookings Notification Bar
+              _PendingBookingsNotification(
+                doctorId: doctorId,
+                api: api,
+                onStatusChanged: _handleRefresh,
+              ),
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Expanded(
@@ -445,6 +452,7 @@ class _RecentPatientsList extends StatelessWidget {
             final patient = {
               'id': data['patient_id']?.toString() ?? '',
               'appointment_id': data['appointment_id']?.toString() ?? '',
+              'report_id': data['id']?.toString() ?? '', // Medical report ID for completion
               'name': (data['patient_name'] ?? 'Unknown').toString(),
               'age': (data['patient_age'] ?? 'N/A').toString(),
               'condition': (data['condition'] ?? 'N/A').toString(),
@@ -536,6 +544,355 @@ class _RecentPatientsList extends StatelessWidget {
           }).toList(),
         );
       },
+    );
+  }
+}
+
+// ============================================================
+// PENDING BOOKINGS NOTIFICATION BAR
+// ============================================================
+class _PendingBookingsNotification extends StatefulWidget {
+  final String doctorId;
+  final ApiService api;
+  final VoidCallback onStatusChanged;
+
+  const _PendingBookingsNotification({
+    required this.doctorId,
+    required this.api,
+    required this.onStatusChanged,
+  });
+
+  @override
+  State<_PendingBookingsNotification> createState() => _PendingBookingsNotificationState();
+}
+
+class _PendingBookingsNotificationState extends State<_PendingBookingsNotification> {
+  List<Map<String, dynamic>> _pendingBookings = [];
+  bool _loading = true;
+  bool _expanded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPendingBookings();
+  }
+
+  Future<void> _loadPendingBookings() async {
+    setState(() => _loading = true);
+    final bookings = await widget.api.getPendingBookings(widget.doctorId);
+    if (mounted) {
+      setState(() {
+        _pendingBookings = bookings;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _handleAction(String appointmentId, String action) async {
+    final result = await widget.api.updateAppointmentStatus(appointmentId, action);
+    if (result != null) {
+      await _loadPendingBookings();
+      widget.onStatusChanged();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(action == 'confirmed' 
+                ? '✅ Appointment confirmed!' 
+                : '❌ Appointment declined'),
+            backgroundColor: action == 'confirmed' ? Colors.green : Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox.shrink();
+    }
+
+    if (_pendingBookings.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFEE2E2), Color(0xFFFECACA)], // Light red tones
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.withOpacity(0.15),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          // Header
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFDC2626), // Red
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.notifications_active, color: Colors.white, size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'New Booking Requests',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF991B1B), // Dark red
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_pendingBookings.length} pending approval',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFFB91C1C), // Medium red
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFDC2626),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${_pendingBookings.length}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    _expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    color: const Color(0xFFB91C1C),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Expanded list
+          if (_expanded)
+            Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(16),
+                  bottomRight: Radius.circular(16),
+                ),
+              ),
+              child: Column(
+                children: _pendingBookings.map((booking) {
+                  final patientName = booking['patient_name'] ?? 'Unknown';
+                  final appointmentDate = booking['appointment_date']?.toString() ?? '';
+                  final reason = booking['reason']?.toString() ?? 'General Consultation';
+                  final apptId = booking['id'].toString();
+
+                  // Parse date and time separately
+                  String formattedDate = '';
+                  String formattedTime = '';
+                  try {
+                    final dt = DateTime.parse(appointmentDate);
+                    formattedDate = '${dt.day}/${dt.month}/${dt.year}';
+                    formattedTime = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+                  } catch (_) {
+                    formattedDate = appointmentDate;
+                    formattedTime = '';
+                  }
+
+                  return Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Patient Avatar - Professional style
+                        Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                const Color(0xFFDC2626),
+                                const Color(0xFFEF4444),
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Center(
+                            child: Text(
+                              patientName.isNotEmpty ? patientName[0].toUpperCase() : '?',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 20,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        // Patient Details - Professional layout
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Patient Name - PROMINENT
+                              Text(
+                                patientName.split(' ').map((word) => 
+                                  word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' : ''
+                                ).join(' '),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 17,
+                                  color: Color(0xFF1F2937),
+                                  letterSpacing: 0.2,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              // Reason Badge - Subtle and elegant
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF3F4F6),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                                ),
+                                child: Text(
+                                  reason,
+                                  style: TextStyle(
+                                    color: Colors.grey.shade700,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              // Date and Time - Clean inline display
+                              Row(
+                                children: [
+                                  Icon(Icons.event_outlined, size: 14, color: Colors.grey.shade500),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    formattedDate,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (formattedTime.isNotEmpty) ...[
+                                    Container(
+                                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                                      width: 4,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade400,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    Icon(Icons.schedule_outlined, size: 14, color: Colors.grey.shade500),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      formattedTime,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey.shade600,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Action Buttons - Elegant circular design
+                        Column(
+                          children: [
+                            // Accept Button
+                            Material(
+                              color: const Color(0xFF10B981),
+                              borderRadius: BorderRadius.circular(10),
+                              child: InkWell(
+                                onTap: () => _handleAction(apptId, 'confirmed'),
+                                borderRadius: BorderRadius.circular(10),
+                                child: const Padding(
+                                  padding: EdgeInsets.all(10),
+                                  child: Icon(Icons.check_rounded, color: Colors.white, size: 20),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            // Decline Button
+                            Material(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              child: InkWell(
+                                onTap: () => _handleAction(apptId, 'declined'),
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0xFFEF4444)),
+                                  ),
+                                  child: const Icon(Icons.close_rounded, color: Color(0xFFEF4444), size: 20),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

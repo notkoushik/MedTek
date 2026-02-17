@@ -1,11 +1,14 @@
 // lib/src/triage_page.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../services/api_service.dart';
+import '../services/session_service.dart';
 import 'hospital_selection_page.dart';
 
 class TriagePage extends StatefulWidget {
@@ -168,6 +171,11 @@ class _TriagePageState extends State<TriagePage> {
   Future<void> _speak(String text) async {
     if (text.isEmpty) return;
 
+    final prefs = await SharedPreferences.getInstance();
+    final bool audioEnabled = prefs.getBool('audio_greetings_enabled') ?? true;
+
+    if (!audioEnabled) return;
+
     try {
       await _flutterTts.speak(text);
     } catch (e) {
@@ -239,8 +247,20 @@ class _TriagePageState extends State<TriagePage> {
         prompt += "\n\n(Generate a final medical triage report with: 1. Symptoms, 2. Possible Condition, 3. Recommended Specialist)";
       }
 
-      // ✅ Use Backend API (Gemini)
-      final reply = await ApiService().sendChatMessage(prompt, history);
+      // ✅ Fetch User Profile for Context
+      final session = context.read<SessionService>();
+      final user = session.user;
+      
+      final Map<String, dynamic> userProfile = {
+        'name': user?['name'] ?? 'Patient',
+        'age': '30', // Mock data - in real app, fetch from DB
+        'gender': 'Male', // Mock data
+        'allergies': 'Penicillin', // Mock data
+        'conditions': 'None', // Mock data
+      };
+
+      // ✅ Use Backend API (Gemini) with Context
+      final reply = await ApiService().sendChatMessage(prompt, history, userProfile: userProfile);
 
       if (mounted) {
         setState(() {
@@ -1577,82 +1597,13 @@ class _TriagePageState extends State<TriagePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: const Color(0xFFFF0000),
-        foregroundColor: Colors.white,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.local_hospital, size: 20),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Medical Assistant',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  '${_questionCount}/$_maxQuestions questions',
-                  style: const TextStyle(fontSize: 11, color: Colors.white70),
-                ),
-              ],
-            ),
-          ],
-        ),
-        actions: [
-          // Speaker control button
-          if (_isSpeaking)
-            IconButton(
-              icon: const Icon(Icons.volume_off),
-              tooltip: 'Stop Speaking',
-              onPressed: _stopSpeaking,
-            ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Clear Chat',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('Clear Chat'),
-                  content: const Text('Start a new consultation?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        _stopSpeaking();
-                        _stopListening();
-                        setState(() {
-                          _messages.clear();
-                          _questionCount = 0;
-                          _reportGenerated = false;
-                          _addWelcomeMessage();
-                        });
-                        Navigator.pop(context);
-                      },
-                      child: const Text('Clear', style: TextStyle(color: Colors.red)),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ],
-      ),
+      backgroundColor: Colors.white,
+      resizeToAvoidBottomInset: true,
       body: Column(
         children: [
+          // Medical Assistant Header (custom header since we're in a PageView)
+          _buildChatHeader(),
+          
           // Quick suggestions (only show at start)
           if (_messages.length <= 1) _buildQuickSuggestions(),
 
@@ -1677,21 +1628,179 @@ class _TriagePageState extends State<TriagePage> {
           // Report ready button
           if (_reportGenerated)
             Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.white,
-              child: FilledButton.icon(
-                onPressed: _navigateToHospitalSelection,
-                icon: const Icon(Icons.description, size: 20),
-                label: const Text('View Report & Find Hospitals'),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  backgroundColor: Colors.red,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, -4),
+                  ),
+                ],
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFE53935), Color(0xFFB71C1C)],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFE53935).withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _navigateToHospitalSelection,
+                    borderRadius: BorderRadius.circular(14),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.assignment_rounded, color: Colors.white, size: 22),
+                          SizedBox(width: 10),
+                          Text(
+                            'View Report & Find Hospitals',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Icon(Icons.arrow_forward_ios_rounded, color: Colors.white70, size: 16),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
 
           // Input field
           _buildInputField(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChatHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFE53935), Color(0xFFC62828)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // AI Avatar
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.medical_services_rounded, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 12),
+          // Status info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Medical Assistant',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _isTyping ? Colors.orange : Colors.greenAccent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _isTyping ? 'Typing...' : 'Online • ${_questionCount}/$_maxQuestions',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Actions
+          if (_isSpeaking)
+            IconButton(
+              icon: const Icon(Icons.volume_off_rounded, color: Colors.white),
+              onPressed: _stopSpeaking,
+              tooltip: 'Stop Speaking',
+            ),
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded, color: Colors.white),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  title: const Text('Start New Consultation?'),
+                  content: const Text('This will clear the current chat.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Cancel'),
+                    ),
+                    FilledButton(
+                      onPressed: () {
+                        _stopSpeaking();
+                        _stopListening();
+                        setState(() {
+                          _messages.clear();
+                          _questionCount = 0;
+                          _reportGenerated = false;
+                          _addWelcomeMessage();
+                        });
+                        Navigator.pop(ctx);
+                      },
+                      style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                      child: const Text('Clear'),
+                    ),
+                  ],
+                ),
+              );
+            },
+            tooltip: 'New Chat',
+          ),
         ],
       ),
     );
@@ -1778,73 +1887,153 @@ class _TriagePageState extends State<TriagePage> {
   }
 
   Widget _buildMessageBubble(ChatMessage message) {
+    final isUser = message.isUser;
+    
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 20),
       child: Row(
-        mainAxisAlignment: message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (!message.isUser) ...[
+          // AI Avatar (left side)
+          if (!isUser) ...[
             Container(
-              padding: const EdgeInsets.all(8),
-              decoration: const BoxDecoration(
-                color: Color(0xFFFF0000),
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFFE53935), Color(0xFFC62828)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFE53935).withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.local_hospital, color: Colors.white, size: 20),
+              child: const Icon(Icons.medical_services_rounded, color: Colors.white, size: 18),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
           ],
+          
+          // Message Content
           Flexible(
             child: Column(
-              crossAxisAlignment: message.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
+                // Message Bubble
                 Container(
+                  constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.72,
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: message.isUser
-                        ? const Color(0xFFFF0000)
-                        : message.isError
-                        ? Colors.red.shade50
-                        : Colors.white,
+                    gradient: isUser
+                        ? const LinearGradient(
+                            colors: [Color(0xFFE53935), Color(0xFFB71C1C)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          )
+                        : null,
+                    color: isUser 
+                        ? null 
+                        : message.isError 
+                            ? const Color(0xFFFEE2E2) 
+                            : Colors.white,
                     borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(20),
-                      topRight: const Radius.circular(20),
-                      bottomLeft: Radius.circular(message.isUser ? 20 : 4),
-                      bottomRight: Radius.circular(message.isUser ? 4 : 20),
+                      topLeft: const Radius.circular(18),
+                      topRight: const Radius.circular(18),
+                      bottomLeft: Radius.circular(isUser ? 18 : 4),
+                      bottomRight: Radius.circular(isUser ? 4 : 18),
                     ),
-                    border: !message.isUser ? Border.all(color: Colors.grey[200]!) : null,
+                    boxShadow: [
+                      BoxShadow(
+                        color: isUser 
+                            ? const Color(0xFFE53935).withOpacity(0.25)
+                            : Colors.black.withOpacity(0.06),
+                        blurRadius: isUser ? 12 : 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                    border: !isUser && !message.isError
+                        ? Border.all(color: const Color(0xFFF0F0F0), width: 1)
+                        : null,
                   ),
                   child: Text(
                     message.text,
                     style: TextStyle(
-                      color: message.isUser
+                      color: isUser
                           ? Colors.white
                           : message.isError
-                          ? Colors.red.shade900
-                          : Colors.black87,
-                      fontSize: 14,
-                      height: 1.5,
+                              ? const Color(0xFFB91C1C)
+                              : const Color(0xFF1F2937),
+                      fontSize: 15,
+                      height: 1.45,
+                      fontWeight: FontWeight.w400,
+                      letterSpacing: 0.1,
                     ),
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  _formatTime(message.timestamp),
-                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                
+                // Timestamp
+                Padding(
+                  padding: EdgeInsets.only(
+                    top: 6,
+                    left: isUser ? 0 : 4,
+                    right: isUser ? 4 : 0,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _formatTime(message.timestamp),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey[500],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      if (isUser) ...[
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.done_all_rounded,
+                          size: 14,
+                          color: Colors.grey[400],
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-          if (message.isUser) ...[
-            const SizedBox(width: 8),
+          
+          // User Avatar (right side)
+          if (isUser) ...[
+            const SizedBox(width: 10),
             Container(
-              padding: const EdgeInsets.all(8),
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
-                color: Colors.grey[300],
+                gradient: LinearGradient(
+                  colors: [Colors.grey.shade400, Colors.grey.shade600],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.3),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-              child: const Icon(Icons.person, color: Colors.black54, size: 20),
+              child: const Icon(Icons.person_rounded, color: Colors.white, size: 20),
             ),
           ],
         ],
@@ -1853,31 +2042,70 @@ class _TriagePageState extends State<TriagePage> {
   }
 
   Widget _buildTypingIndicator() {
-    return Container(
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          // AI Avatar - matching the message bubble style
           Container(
-            padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(
-              color: Color(0xFFFF0000),
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFE53935), Color(0xFFC62828)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFE53935).withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
-            child: const Icon(Icons.local_hospital, color: Colors.white, size: 20),
+            child: const Icon(Icons.medical_services_rounded, color: Colors.white, size: 18),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 10),
+          // Typing bubble
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.grey[200]!),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(18),
+                topRight: Radius.circular(18),
+                bottomLeft: Radius.circular(4),
+                bottomRight: Radius.circular(18),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+              border: Border.all(color: const Color(0xFFF0F0F0), width: 1),
             ),
             child: Row(
-              children: List.generate(3, (index) => Padding(
-                padding: EdgeInsets.only(right: index < 2 ? 4 : 0),
-                child: _buildDot(index),
-              )),
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Analyzing',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                ...List.generate(3, (index) => Padding(
+                  padding: EdgeInsets.only(right: index < 2 ? 3 : 0),
+                  child: _buildDot(index),
+                )),
+              ],
             ),
           ),
         ],
@@ -1887,18 +2115,26 @@ class _TriagePageState extends State<TriagePage> {
 
   Widget _buildDot(int index) {
     return TweenAnimationBuilder(
-      tween: Tween<double>(begin: 0.5, end: 1.0),
-      duration: Duration(milliseconds: 600 + (index * 100)),
+      tween: Tween<double>(begin: 0.3, end: 1.0),
+      duration: Duration(milliseconds: 500 + (index * 150)),
       curve: Curves.easeInOut,
       builder: (context, double value, child) {
-        return Opacity(
-          opacity: value,
-          child: Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
-              color: Colors.grey,
-              shape: BoxShape.circle,
+        return Transform.translate(
+          offset: Offset(0, -3 * (1 - value)),
+          child: Opacity(
+            opacity: value,
+            child: Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    const Color(0xFFE53935).withOpacity(0.8),
+                    const Color(0xFFB71C1C).withOpacity(0.9),
+                  ],
+                ),
+                shape: BoxShape.circle,
+              ),
             ),
           ),
         );
@@ -1911,70 +2147,82 @@ class _TriagePageState extends State<TriagePage> {
 
   Widget _buildInputField() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -4),
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
           ),
         ],
       ),
       child: SafeArea(
+        top: false,
         child: Row(
           children: [
             // Microphone button
             Container(
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: _isListening
-                      ? [Colors.green, Colors.green.shade700]
+                      ? [Colors.green.shade400, Colors.green.shade600]
                       : _speechEnabled && !_reportGenerated
-                      ? [const Color(0xFFFF0000).withOpacity(0.8), const Color(0xFFCC0000)]
+                      ? [const Color(0xFFE53935), const Color(0xFFC62828)]
                       : [Colors.grey.shade300, Colors.grey.shade400],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
                 shape: BoxShape.circle,
                 boxShadow: _isListening ? [
                   BoxShadow(
-                    color: Colors.green.withOpacity(0.5),
-                    blurRadius: 12,
+                    color: Colors.green.withOpacity(0.4),
+                    blurRadius: 10,
                     spreadRadius: 2,
                   ),
-                ] : [],
+                ] : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-              child: IconButton(
-                onPressed: _speechEnabled && !_reportGenerated && !_isTyping
-                    ? (_isListening ? _stopListening : _startListening)
-                    : null,
-                icon: Icon(
-                  _isListening ? Icons.mic : Icons.mic_none_rounded,
-                  color: _isListening || (_speechEnabled && !_reportGenerated)
-                      ? Colors.white
-                      : Colors.grey.shade600,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(22),
+                  onTap: _speechEnabled && !_reportGenerated && !_isTyping
+                      ? (_isListening ? _stopListening : _startListening)
+                      : null,
+                  child: Icon(
+                    _isListening ? Icons.mic : Icons.mic_none_rounded,
+                    color: _isListening || (_speechEnabled && !_reportGenerated)
+                        ? Colors.white
+                        : Colors.grey.shade600,
+                    size: 22,
+                  ),
                 ),
-                tooltip: _isListening
-                    ? 'Stop listening'
-                    : _speechEnabled
-                    ? 'Voice input'
-                    : 'Microphone unavailable',
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.grey[100],
+                  color: const Color(0xFFF5F5F5),
                   borderRadius: BorderRadius.circular(24),
                   border: _isListening
-                      ? Border.all(color: Colors.green, width: 2)
-                      : null,
+                      ? Border.all(color: Colors.green.shade400, width: 1.5)
+                      : Border.all(color: const Color(0xFFE8E8E8), width: 1),
                 ),
                 child: TextField(
                   controller: _messageController,
                   enabled: !_reportGenerated && !_isListening && !_isTyping,
+                  style: const TextStyle(fontSize: 15),
                   decoration: InputDecoration(
                     hintText: _isListening
                         ? 'Listening...'
@@ -1982,9 +2230,11 @@ class _TriagePageState extends State<TriagePage> {
                         ? 'Consultation complete'
                         : 'Describe your symptoms...',
                     border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     hintStyle: TextStyle(
-                      fontSize: 14,
-                      color: _isListening ? Colors.green : Colors.grey,
+                      fontSize: 15,
+                      color: _isListening ? Colors.green.shade600 : Colors.grey.shade500,
                       fontStyle: _isListening ? FontStyle.italic : FontStyle.normal,
                     ),
                   ),
@@ -1994,26 +2244,34 @@ class _TriagePageState extends State<TriagePage> {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Container(
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: _reportGenerated || _isTyping || _isListening
-                      ? [Colors.grey, Colors.grey.shade400]
-                      : [const Color(0xFFFF0000), const Color(0xFFCC0000)],
+                      ? [Colors.grey.shade400, Colors.grey.shade500]
+                      : [const Color(0xFFE53935), const Color(0xFFC62828)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
                 shape: BoxShape.circle,
                 boxShadow: _reportGenerated || _isTyping || _isListening ? [] : [
                   BoxShadow(
-                    color: const Color(0xFFFF0000).withOpacity(0.3),
+                    color: const Color(0xFFE53935).withOpacity(0.3),
                     blurRadius: 8,
-                    offset: const Offset(0, 4),
+                    offset: const Offset(0, 3),
                   ),
                 ],
               ),
-              child: IconButton(
-                onPressed: (_isTyping || _reportGenerated || _isListening) ? null : _sendMessage,
-                icon: const Icon(Icons.send_rounded, color: Colors.white),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(22),
+                  onTap: !_reportGenerated && !_isTyping && !_isListening ? _sendMessage : null,
+                  child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                ),
               ),
             ),
           ],

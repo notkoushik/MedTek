@@ -1,15 +1,18 @@
 import 'dart:math';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:http/http.dart' as http;
+import 'package:geolocator/geolocator.dart' as geo;
 
 import '../services/api_service.dart';
 import '../services/session_service.dart';
-import '../services/location_service.dart'; // NEW
-import '../screens/rider/ride_booking_screen.dart'; // NEW
-import 'package:geocoding/geocoding.dart'; // NEW for fallback
+import '../services/location_service.dart';
+import '../screens/rider/ride_booking_screen.dart';
+import 'package:geocoding/geocoding.dart';
 
 class BookAppointmentPage extends StatefulWidget {
   final Map<String, dynamic> doctor;   // must contain doctorId, userId, name, specialization
@@ -166,15 +169,16 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
                                 style: const TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1F2937), // Dark gray
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 widget.doctor['specialization']?.toString() ??
                                     'General Physician',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontSize: 14,
-                                  color: Colors.grey[600],
+                                  color: Color(0xFF4B5563), // Medium gray
                                 ),
                               ),
                               const SizedBox(height: 4),
@@ -214,6 +218,7 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
+                        color: Color(0xFF1F2937), // Dark gray
                       ),
                     ),
                   ),
@@ -276,6 +281,7 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
+                                color: Color(0xFF1F2937), // Dark gray
                               ),
                             ),
                           ],
@@ -364,27 +370,142 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
     );
   }
 
-  Future<void> _addHospitalAnnotations(Position pos) async {
+  Future<void> _addHospitalAnnotations(Position hospitalPos) async {
     if (_pointManager == null || _circleManager == null) return;
 
     await _pointManager!.deleteAll();
     await _circleManager!.deleteAll();
 
+    // Hospital marker (red)
     await _pointManager!.create(
       PointAnnotationOptions(
-        geometry: Point(coordinates: pos),
+        geometry: Point(coordinates: hospitalPos),
         iconSize: 1.5,
       ),
     );
 
     await _circleManager!.create(
       CircleAnnotationOptions(
-        geometry: Point(coordinates: pos),
-        circleRadius: 8.0,
+        geometry: Point(coordinates: hospitalPos),
+        circleRadius: 10.0,
         circleColor: Colors.red.value,
         circleOpacity: 0.8,
       ),
     );
+
+    // Get user location and add marker + route
+    try {
+      final position = await geo.Geolocator.getCurrentPosition(
+        desiredAccuracy: geo.LocationAccuracy.high,
+      );
+      
+      // User marker (blue)
+      await _circleManager!.create(
+        CircleAnnotationOptions(
+          geometry: Point(coordinates: Position(position.longitude, position.latitude)),
+          circleRadius: 8.0,
+          circleColor: Colors.blue.value,
+          circleOpacity: 0.8,
+        ),
+      );
+
+      // Draw route line
+      await _drawRouteLine(
+        position.latitude, position.longitude,
+        hospitalPos.lat.toDouble(), hospitalPos.lng.toDouble(),
+      );
+
+      // Adjust camera to show both points
+      await _map!.flyTo(
+        CameraOptions(
+          center: Point(coordinates: Position(
+            (position.longitude + hospitalPos.lng.toDouble()) / 2,
+            (position.latitude + hospitalPos.lat.toDouble()) / 2,
+          )),
+          zoom: 12.0,
+        ),
+        MapAnimationOptions(duration: 800),
+      );
+    } catch (e) {
+      debugPrint('Error getting user location for route: $e');
+    }
+  }
+
+  // Draw a soft, clean route line from user to hospital
+  Future<void> _drawRouteLine(double userLat, double userLng, double hospLat, double hospLng) async {
+    if (_map == null) return;
+    
+    debugPrint('🗺️ Drawing route from ($userLat, $userLng) to ($hospLat, $hospLng)');
+    
+    try {
+      // Fetch route from Mapbox Directions API
+      final accessToken = 'pk.eyJ1Ijoic3Jpa2FrcyIsImEiOiJjbTU5ZHBqZ2QxdGVrMnFvaGc3MXRlZjV1In0.1WWDNzjyDZ3maqSS2qXWLQ';
+      final url = 'https://api.mapbox.com/directions/v5/mapbox/driving/'
+          '$userLng,$userLat;'
+          '$hospLng,$hospLat'
+          '?geometries=geojson&overview=full&access_token=$accessToken';
+      
+      debugPrint('🌐 Fetching route from: $url');
+      final response = await http.get(Uri.parse(url));
+      debugPrint('📡 Response status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final routes = data['routes'] as List;
+        
+        if (routes.isNotEmpty) {
+          final geometry = routes[0]['geometry'];
+          final coordinates = geometry['coordinates'] as List;
+          
+          debugPrint('✅ Got ${coordinates.length} route points');
+          
+          // Convert to Position list
+          final routeCoords = coordinates.map<Position>((coord) => 
+            Position((coord[0] as num).toDouble(), (coord[1] as num).toDouble())
+          ).toList();
+          
+          // Use polyline annotation manager (more reliable)
+          final polylineManager = await _map!.annotations.createPolylineAnnotationManager();
+          await polylineManager.create(PolylineAnnotationOptions(
+            geometry: LineString(coordinates: routeCoords),
+            lineColor: const Color(0xFF4ECDC4).value, // Soft teal
+            lineWidth: 5.0,
+            lineOpacity: 0.9,
+          ));
+          
+          debugPrint('✅ Route line drawn successfully');
+        } else {
+          debugPrint('⚠️ No routes found in response');
+          _drawStraightLine(userLat, userLng, hospLat, hospLng);
+        }
+      } else {
+        debugPrint('❌ API error: ${response.body}');
+        _drawStraightLine(userLat, userLng, hospLat, hospLng);
+      }
+    } catch (e) {
+      debugPrint('❌ Error drawing route: $e');
+      _drawStraightLine(userLat, userLng, hospLat, hospLng);
+    }
+  }
+
+  // Fallback: draw a simple straight line
+  Future<void> _drawStraightLine(double userLat, double userLng, double hospLat, double hospLng) async {
+    try {
+      debugPrint('📏 Drawing straight line fallback');
+      final polylineManager = await _map!.annotations.createPolylineAnnotationManager();
+      await polylineManager.create(PolylineAnnotationOptions(
+        geometry: LineString(coordinates: [
+          Position(userLng, userLat),
+          Position(hospLng, hospLat),
+        ]),
+        lineColor: const Color(0xFF4ECDC4).value,
+        lineWidth: 4.0,
+        lineOpacity: 0.8,
+      ));
+      debugPrint('✅ Straight line drawn');
+    } catch (e) {
+      debugPrint('❌ Fallback route error: $e');
+    }
   }
 
   Widget _buildSelectionCard({
@@ -433,14 +554,15 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
+                          color: Color(0xFF1F2937), // Dark gray
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         value,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 14,
-                          color: Colors.grey[600],
+                          color: Color(0xFF4B5563), // Medium gray
                         ),
                       ),
                     ],

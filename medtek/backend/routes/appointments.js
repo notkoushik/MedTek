@@ -30,6 +30,23 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Doctor not found' });
     }
 
+    // ✅ Check for existing appointment with same user + doctor + date
+    const existingAppointment = await pool.query(
+      `SELECT id FROM appointments 
+       WHERE user_id = $1 
+         AND doctor_id = $2 
+         AND appointment_date::date = $3::date
+         AND status != 'cancelled'`,
+      [user_id, finalDoctorId, appointment_date]
+    );
+
+    if (existingAppointment.rows.length > 0) {
+      return res.status(409).json({
+        error: 'You already have an appointment with this doctor on this date',
+        existing_appointment_id: existingAppointment.rows[0].id
+      });
+    }
+
     const result = await pool.query(
       `INSERT INTO appointments 
        (user_id, doctor_id, hospital_id, appointment_date, reason, status)
@@ -170,6 +187,66 @@ router.get('/', async (req, res) => {
     res.json({ appointments: result.rows });
   } catch (e) {
     console.error('GET /appointments error', e);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ✅ PATCH /appointments/:id/status - Doctor accepts/declines booking
+router.patch('/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body; // 'confirmed' or 'declined'
+
+    if (!status || !['confirmed', 'declined'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status. Use confirmed or declined' });
+    }
+
+    // Get appointment details first
+    const apptRes = await pool.query(
+      'SELECT doctor_id, appointment_date FROM appointments WHERE id = $1',
+      [id]
+    );
+
+    if (apptRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    const { doctor_id, appointment_date } = apptRes.rows[0];
+    let queueNumber = null;
+
+    // If confirming, calculate queue number for this doctor on this day
+    if (status === 'confirmed') {
+      const queueRes = await pool.query(
+        `SELECT COALESCE(MAX(queue_number), 0) + 1 as next_queue
+         FROM appointments 
+         WHERE doctor_id = $1 
+           AND appointment_date::date = $2::date
+           AND status = 'confirmed'`,
+        [doctor_id, appointment_date]
+      );
+      queueNumber = queueRes.rows[0].next_queue;
+    }
+
+    // Update the appointment
+    const updateQuery = status === 'confirmed'
+      ? `UPDATE appointments SET status = $1, queue_number = $2, updated_at = NOW() WHERE id = $3 RETURNING *`
+      : `UPDATE appointments SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *`;
+
+    const updateParams = status === 'confirmed'
+      ? [status, queueNumber, id]
+      : [status, id];
+
+    const result = await pool.query(updateQuery, updateParams);
+
+    console.log(`✅ Appointment ${id} ${status}${queueNumber ? ` - OP #${queueNumber}` : ''}`);
+
+    res.json({
+      success: true,
+      appointment: result.rows[0],
+      queue_number: queueNumber
+    });
+  } catch (e) {
+    console.error('PATCH /appointments/:id/status error', e);
     res.status(500).json({ error: 'Server error' });
   }
 });
