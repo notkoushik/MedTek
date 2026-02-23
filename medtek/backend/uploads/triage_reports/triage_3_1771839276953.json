@@ -1,0 +1,52 @@
+{
+  "metadata": {
+    "timestamp": "2026-02-23T09:34:36.953Z",
+    "userId": "3",
+    "patientProfile": {
+      "name": "koushik",
+      "age": "30",
+      "gender": "Unknown",
+      "allergies": "None",
+      "conditions": "None",
+      "language": "en"
+    }
+  },
+  "diagnosis_report": "Symptoms: Congestion, sore throat, cough, mild fever.  \nPossible Condition: Common viral upper respiratory infection (cold).  \nRecommended Specialist: Primary care physician or general practitioner; refer to an ENT specialist if symptoms persist or worsen.",
+  "conversation_history": [
+    {
+      "text": "Hi! 👋 I'm your Medical Assistant. Tell me what symptoms you're experiencing today.",
+      "isUser": false,
+      "timestamp": "2026-02-23T15:04:05.399412"
+    },
+    {
+      "text": "Hi",
+      "isUser": true,
+      "timestamp": "2026-02-23T15:04:10.536046"
+    },
+    {
+      "text": "Hello! How can I help you today? What symptoms are you experiencing?",
+      "isUser": false,
+      "timestamp": "2026-02-23T15:04:12.533970"
+    },
+    {
+      "text": "Cold",
+      "isUser": true,
+      "timestamp": "2026-02-23T15:04:18.876295"
+    },
+    {
+      "text": "I’m sorry you’re feeling under the weather. A “cold” can involve congestion, sore throat, cough, or fever. Could you tell me how long you’ve had these symptoms, if you’ve had a fever or breathing difficulty, and whether they’re getting worse? If you notice severe shortness of breath, chest pain, or a high fever, please call emergency services right away. Otherwise, a primary care clinician can evaluate you and refer to an ENT or respiratory specialist if needed.",
+      "isUser": false,
+      "timestamp": "2026-02-23T15:04:21.659357"
+    },
+    {
+      "text": "Ok",
+      "isUser": true,
+      "timestamp": "2026-02-23T15:04:30.633221"
+    },
+    {
+      "text": "Symptoms: Congestion, sore throat, cough, mild fever.  \nPossible Condition: Common viral upper respiratory infection (cold).  \nRecommended Specialist: Primary care physician or general practitioner; refer to an ENT specialist if symptoms persist or worsen.",
+      "isUser": false,
+      "timestamp": "2026-02-23T15:04:33.116692"
+    }
+  ]
+}

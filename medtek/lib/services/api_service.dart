@@ -27,8 +27,9 @@ class ApiService {
      }
   }
 
-  // Helper for Ollama endpoint
-  static String get ollamaBaseUrl => 'http://$host:8006/api/generate';
+  // Helper for Ollama endpoint - fixed IP for the local Ollama server
+  static const String ollamaBaseUrl = 'http://192.168.1.117:8006/api/generate';
+
 
   ApiService._internal() {
     _dio = Dio(
@@ -773,6 +774,32 @@ class ApiService {
     );
   }
 
+  Future<Map<String, dynamic>?> saveTriageReport({
+    required String userId,
+    required String report,
+    required List<Map<String, dynamic>> conversation,
+    Map<String, dynamic>? userProfile,
+  }) async {
+    try {
+      final res = await _dio.post(
+        '/triage/save',
+        data: {
+          'userId': userId,
+          'report': report,
+          'conversation': conversation,
+          'userProfile': userProfile ?? {},
+        },
+      );
+      if (res.statusCode == 200) {
+        return res.data as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      print('Error saving triage report: $e');
+      return null;
+    }
+  }
+
   Future<List<Map<String, dynamic>>> getMyMedicalReports() async {
     final res = await _dio.get('/medical-reports/mine');
     final map = res.data as Map<String, dynamic>?;
@@ -1019,6 +1046,30 @@ class ApiService {
       throw Exception('Failed to get AI response');
     }
   }
+
+  // ✅ Ollama Triage Chat — calls local OptGPT-4:latest model
+  Future<String> sendChatMessageOllama(String message, List<Map<String, String>> history, {Map<String, dynamic>? userProfile}) async {
+    try {
+      final res = await _dio.post(
+        '/ai/chat-ollama',
+        data: {
+          'message': message,
+          'history': history,
+          'userProfile': userProfile ?? {},
+        },
+        options: Options(
+          sendTimeout: const Duration(seconds: 90),
+          receiveTimeout: const Duration(seconds: 90),
+        ),
+      );
+      return res.data['reply']?.toString() ?? 'Sorry, I did not get a response.';
+    } catch (e) {
+      print('Ollama Chat Error: $e');
+      throw Exception('Failed to get Ollama response');
+    }
+  }
+
+
 
   // ---------- PILL IDENTIFICATION (Gemini Vision) ----------
 

@@ -1,0 +1,16 @@
+{
+  "metadata": {
+    "timestamp": "2026-02-23T06:57:24.735Z",
+    "userId": "123",
+    "patientProfile": {
+      "name": "John Doe"
+    }
+  },
+  "diagnosis_report": "Test report",
+  "conversation_history": [
+    {
+      "role": "user",
+      "content": "hello"
+    }
+  ]
+}

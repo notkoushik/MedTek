@@ -11,7 +11,7 @@ CREATE TABLE users (
   -- kept for legacy/redundancy if needed
   hospital_name VARCHAR(150),
   experience_years INTEGER,
-  about TEXT,
+  about TEXT,x`
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

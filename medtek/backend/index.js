@@ -371,6 +371,7 @@ app.use('/activities', require('./routes/activities')); // ✅ NEW ACTIVITIES RO
 app.use('/ai', require('./routes/ai')); // ✅ NEW AI ROUTE (Gemini)
 app.use('/medical-reports', authMiddleware, medicalReportsRouter);
 app.use('/lab', require('./routes/lab')); // ✅ NEW LAB ASSISTANT ROUTE
+app.use('/triage', require('./routes/triage')); // ✅ NEW TRIAGE ROUTE
 
 // ---------- SERVER BOOT ----------
 

@@ -594,25 +594,41 @@ class _HospitalDetailPageState extends State<HospitalDetailPage> {
 
           const SizedBox(height: 20),
 
-          // Book Ride button
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed:
-                _userPosition == null ? null : _bookRideToHospital,
-                icon: const Icon(Icons.local_taxi, size: 24),
-                label: const Text(
-                  'Book Ride to Hospital',
-                  style:
-                  TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+          // Enhanced Hospital Details
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
                 ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  padding: const EdgeInsets.symmetric(vertical: 18),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Hospital Details',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1F2937),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 16),
+                _buildDetailRow(Icons.phone_in_talk, 'Contact', '+1 (555) 123-4567'),
+                const Divider(height: 24),
+                _buildDetailRow(Icons.access_time_filled, 'Hours', 'Open 24 Hours'),
+                const Divider(height: 24),
+                _buildDetailRow(Icons.emergency, 'Emergency Services', 'Available 24/7'),
+                const Divider(height: 24),
+                _buildDetailRow(Icons.medical_services, 'Specialties', 'Cardiology, Neurology, Pediatrics, General'),
+              ],
             ),
           ),
 
@@ -630,6 +646,40 @@ class _HospitalDetailPageState extends State<HospitalDetailPage> {
           const SizedBox(height: 24),
         ],
       ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 20, color: Colors.blue.shade600),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: Color(0xFF1F2937),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

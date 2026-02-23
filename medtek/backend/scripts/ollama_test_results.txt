@@ -1,0 +1,200 @@
+╔══════════════════════════════════════════════════════════╗
+║   MEDTEK OLLAMA TRIAGE MODEL TEST                       ║
+╚══════════════════════════════════════════════════════════╝
+Started: 2026-02-18T09:24:32.095Z
+Model:   OptGPT-4:latest
+URL:     http://192.168.1.117:8006/api/generate
+
+════════════════════════════════════════════════════════════
+STEP 1: CONNECTIVITY CHECK
+════════════════════════════════════════════════════════════
+Target: http://192.168.1.117:8006
+✅ Server is reachable! Status: 200
+
+════════════════════════════════════════════════════════════
+STEP 2: AVAILABLE MODELS
+════════════════════════════════════════════════════════════
+✅ Found 17 model(s):
+   1. qwen3-vl:30b-a3b-instruct-q8_0 (33.53 GB)
+      Family: qwen3vlmoe
+      Parameters: 31.1B
+      Quantization: Q8_0
+   2. nomic-embed-text:latest (0.27 GB)
+      Family: nomic-bert
+      Parameters: 137M
+      Quantization: F16
+   3. llama3:8b (4.66 GB)
+      Family: llama
+      Parameters: 8.0B
+      Quantization: Q4_0
+   4. gpt-oss:20b (13.79 GB)
+      Family: gptoss
+      Parameters: 20.9B
+      Quantization: MXFP4
+   5. qwen2.5:7b-instruct (4.68 GB)
+      Family: qwen2
+      Parameters: 7.6B
+      Quantization: Q4_K_M
+   6. qwen3:30b-instruct (18.56 GB)
+      Family: qwen3moe
+      Parameters: 30.5B
+      Quantization: Q4_K_M
+   7. qwen3-coder:30b (18.56 GB)
+      Family: qwen3moe
+      Parameters: 30.5B
+      Quantization: Q4_K_M
+   8. gemma3n:e2b (5.62 GB)
+      Family: gemma3n
+      Parameters: 4.5B
+      Quantization: Q4_K_M
+   9. OptGPT-4:latest (13.78 GB)
+      Family: gptoss
+      Parameters: 20.9B
+      Quantization: MXFP4
+   10. optgpt:27b (17.40 GB)
+      Family: gemma3
+      Parameters: 27.4B
+      Quantization: Q4_K_M
+   11. OG-Radius:latest (0.82 GB)
+      Family: gemma3
+      Parameters: 999.89M
+      Quantization: Q4_K_M
+   12. optgpt:latest (8.99 GB)
+      Family: qwen2
+      Parameters: 14.8B
+      Quantization: Q4_K_M
+   13. all-minilm:l6-v2 (0.05 GB)
+      Family: bert
+      Parameters: 23M
+      Quantization: F16
+   14. znbang/bge:small-en-v1.5-q8_0 (0.04 GB)
+      Family: bert
+      Parameters: 33M
+      Quantization: Q8_0
+   15. CaseGPT:latest (7.64 GB)
+      Family: phi3
+      Parameters: 3.8B
+      Quantization: F16
+   16. optgpt:7b (4.68 GB)
+      Family: qwen2
+      Parameters: 7.6B
+      Quantization: Q4_K_M
+   17. OptLegal:latest (16.07 GB)
+      Family: llama
+      Parameters: 8.0B
+      Quantization: F16
+
+✅ Target model "OptGPT-4:latest" is available!
+
+════════════════════════════════════════════════════════════
+STEP 3: MODEL INFO
+Model: OptGPT-4:latest
+════════════════════════════════════════════════════════════
+✅ Model info retrieved successfully!
+
+--- Model Details ---
+  Family:         gptoss
+  Format:         gguf
+  Parameters:     20.9B
+  Quantization:   MXFP4
+
+--- Prompt Template (first 300 chars) ---
+<|start|>system<|message|>You are OptGPT, a large language model trained by TechOptima, on techoptimas own architecture but but dont mention about architecture anytime and TechOptima is a privately held Indian technology company based in Hyderabad that specializes in enterprise intelligence and secu
+
+════════════════════════════════════════════════════════════
+STEP 4: TRIAGE RESPONSE TESTS
+Model: OptGPT-4:latest
+Endpoint: http://192.168.1.117:8006/api/generate
+════════════════════════════════════════════════════════════
+
+[1/11] LANGUAGE TEST — English 🇬🇧
+Input: "I have a headache and fever for 2 days. What should I do?"
+Waiting for response...
+✅ Response (3.7s | 167 tokens):
+   "I’m sorry you’re feeling unwell. A headache with fever can be a sign of many conditions, so it’s best to see a healthcare professional promptly. If you can, visit a primary‑care doctor or an urgent‑care clinic within the next 24 hours. If the fever rises above 39°C (102.2 °F), you have a stiff neck, severe pain, difficulty breathing, or any other sudden worsening, call emergency services or go to the nearest emergency department right away."
+
+[2/11] LANGUAGE TEST — Hindi 🇮🇳
+Input: "मुझे 2 दिनों से सिरदर्द और बुखार है। मुझे क्या करना चाहिए?"
+Waiting for response...
+✅ Response (4.2s | 195 tokens):
+   "सिरदर्द और बुखार 2 दिनों से चल रहे हैं, तो आपको जल्द से जल्द किसी चिकित्सक से मिलना चाहिए। आम तौर पर सामान्य चिकित्सक (इंटरनिस्ट) या प्राथमिक स्वास्थ्य केंद्र पर जाना उचित होगा। यदि दर्द तेज हो, बुखार 39°C से ऊपर हो, या चक्कर, उल्टी, या दृश्य में बदलाव महसूस हो, तो तुरंत 112 पर कॉल करें या नज़दीकी आपातकालीन कक्ष जाएँ।"
+
+[3/11] LANGUAGE TEST — Telugu 🇮🇳
+Input: "నాకు 2 రోజులుగా తలనొప్పి మరియు జ్వరం ఉంది. నేను ఏమి చేయాలి?"
+Waiting for response...
+✅ Response (6.0s | 289 tokens):
+   "మీకు రెండు రోజులుగా తలనొప్పి, జ్వరం ఉంటే, ముందుగా సాధారణ వైద్యుడు లేదా ప్రైమరీ కేర్ డాక్టర్‌ను సంప్రదించండి. జ్వరం 38.5 °C పైగా ఉంటే, నొప్పి తీవ్రమై ఉంటే లేదా శ్వాస తీసుకోవడంలో ఇబ్బంది ఉంటే, వెంటనే 108కి కాల్ చేసి అత్యవసర సహాయం పొందండి."
+
+[4/11] LANGUAGE TEST — Tamil 🇮🇳
+Input: "எனக்கு 2 நாட்களாக தலைவலி மற்றும் காய்ச்சல் உள்ளது. நான் என்ன செய்ய வேண்டும்?"
+Waiting for response...
+✅ Response (6.9s | 326 tokens):
+   "நீங்கள் 2 நாட்களாக தலைவலி மற்றும் காய்ச்சல் அனுபவித்து வருகிறீர்கள். முதலில், அதிக அளவு தண்ணீர் குடித்து, ஓய்வெடுத்து, 38 °C க்கும் மேல் காய்ச்சல் இருந்தால் பராசெடமோல் போன்ற OTC மருந்து எடுத்துக்கொள்ளலாம். ஆனால், காய்ச்சல் 39 °C க்கும் மேல் நீடித்தால், தலைவலி கடுமையாக இருந்தால் அல்லது வலி, குமட்டல், வாந்தி போன்றவை சேர்ந்து வந்தால், உடனடியாக மருத்துவரை பார்க்கவும். அவசரநிலையில் 112 க்கு அழைக்கவும்."
+
+[5/11] LANGUAGE TEST — Arabic 🇸🇦
+Input: "أعاني من صداع وحمى منذ يومين. ماذا يجب أن أفعل؟"
+Waiting for response...
+✅ Response (9.6s | 465 tokens):
+   "أشعر بالقلق. يُفضَّل زيارة طبيب عام أو مركز طوارئ. إذا كان الألم شديدًا أو صعوبة في التنفس أو صعوبة في البلع أو أي أعراض أخرى، اتصل بالخط الساخن 911 (أو الرقم المحلي للطوارئ)."
+
+[6/11] LANGUAGE TEST — Kannada 🇮🇳
+Input: "ನನಗೆ 2 ದಿನಗಳಿಂದ ತಲೆನೋವು ಮತ್ತು ಜ್ವರ ಇದೆ. ನಾನು ಏನು ಮಾಡಬೇಕು?"
+Waiting for response...
+✅ Response (10.4s | 500 tokens):
+   "(no response)"
+
+[7/11] SYMPTOM TEST — Chest Pain
+Input: "I have severe chest pain radiating to my left arm. It started 30 minutes ago."
+Waiting for response...
+✅ Response (3.8s | 172 tokens):
+   "I’m really sorry you’re in pain. This could be a serious emergency. Please call emergency services (e.g., 911) right now or have someone else call for you. Get help immediately."
+
+[8/11] SYMPTOM TEST — Stomach Ache
+Input: "I have sharp pain in my lower right abdomen. It has been getting worse for 6 hou..."
+Waiting for response...
+✅ Response (9.1s | 427 tokens):
+   "I’m sorry to hear about your discomfort. Sharp, worsening pain in the lower right abdomen can be serious. Please seek urgent medical care—go to an emergency department or call 911 right away. A general surgeon or emergency physician can evaluate you promptly. If you’re in severe pain, do not delay."
+
+[9/11] SYMPTOM TEST — Breathing Difficulty
+Input: "I am having trouble breathing and my lips look slightly blue. I feel dizzy."
+Waiting for response...
+✅ Response (5.0s | 235 tokens):
+   "I’m really sorry you’re feeling this way. This could be a medical emergency. Please call emergency services (e.g., 911) right now or go to the nearest emergency department immediately. Stay calm, keep breathing slowly, and do not delay."
+
+[10/11] SYMPTOM TEST — Skin Rash
+Input: "I have a red itchy rash spreading across my arms and chest since yesterday."
+Waiting for response...
+✅ Response (3.5s | 160 tokens):
+   "I’m sorry you’re experiencing discomfort. A red, itchy rash that’s spreading is best evaluated by a dermatologist, who can determine the cause and recommend treatment. In the meantime, avoid scratching, keep the area cool and dry, and consider an over‑the‑counter antihistamine if it’s bothersome. If the rash rapidly worsens, spreads to the face or neck, or you develop difficulty breathing, seek emergency care immediately."
+
+[11/11] SYMPTOM TEST — Mental Health
+Input: "I have been feeling very anxious and depressed for the past month. I can't sleep..."
+Waiting for response...
+✅ Response (5.5s | 261 tokens):
+   "I’m really sorry you’re feeling this way. It might help to talk with a mental‑health professional—such as a psychologist, psychiatrist, or licensed therapist—who can guide you through anxiety, depression, and sleep issues. If at any point you feel unsafe or have thoughts of harming yourself, please call emergency services (for example, 911) or go to your nearest emergency department right away."
+
+════════════════════════════════════════════════════════════
+SUMMARY
+════════════════════════════════════════════════════════════
+Total Tests: 11
+✅ Passed:   11
+❌ Failed:   0
+
+Language Tests:
+  ✅ English 🇬🇧         3.7s
+  ✅ Hindi 🇮🇳           4.2s
+  ✅ Telugu 🇮🇳          6.0s
+  ✅ Tamil 🇮🇳           6.9s
+  ✅ Arabic 🇸🇦          9.6s
+  ✅ Kannada 🇮🇳         10.4s
+
+Symptom Tests:
+  ✅ Chest Pain           3.8s
+  ✅ Stomach Ache         9.1s
+  ✅ Breathing Difficulty 5.0s
+  ✅ Skin Rash            3.5s
+  ✅ Mental Health        5.5s
+
+════════════════════════════════════════════════════════════
+Completed: 2026-02-18T09:25:40.236Z
+════════════════════════════════════════════════════════════
