@@ -5,3 +5,9 @@ node_modules/
 coverage/
 dist/
 build/
+
+# Debug/temp files
+*.log
+check_db*.js
+radha_info.json
+*_output.txt

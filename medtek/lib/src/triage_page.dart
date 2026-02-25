@@ -498,62 +498,65 @@ class _TriagePageState extends State<TriagePage> with TickerProviderStateMixin {
         elevation: 0,
         foregroundColor: const Color(0xFF1F2937),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Text(
-              'How would you like to proceed?',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF1F2937),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'How would you like to proceed?',
+                style: TextStyle(
+                  fontSize: 22, // slightly smaller to give more space
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1F2937),
+                ),
+                textAlign: TextAlign.center,
               ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Choose an option below to get the best care.',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 48),
-            _buildOptionCard(
-              title: 'Direct Appointment',
-              description: 'Book a diagnosis appointment with a doctor directly without AI triage.',
-              icon: Icons.calendar_month_rounded,
-              color: Colors.blue,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => HospitalSelectionPage(
-                      triageResult: {
-                        'report': 'Direct Appointment',
-                        'conversation': [],
-                      },
-                      recommendedSpecialties: ['General Physician'],
-                      nearbyDoctors: [],
+              const SizedBox(height: 8),
+              const Text(
+                'Choose an option below to get the best care.',
+                style: TextStyle(fontSize: 15, color: Colors.grey),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32), // Reduced from 48
+              _buildOptionCard(
+                title: 'Direct Appointment',
+                description: 'Book a diagnosis appointment with a doctor directly without AI triage.',
+                icon: Icons.calendar_month_rounded,
+                color: Colors.blue,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => HospitalSelectionPage(
+                        triageResult: const {
+                          'report': 'Direct Appointment',
+                          'conversation': [],
+                        },
+                        recommendedSpecialties: const ['General Physician'],
+                        nearbyDoctors: const [],
+                      ),
                     ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 24),
-            _buildOptionCard(
-              title: 'AI Custom Diagnosis',
-              description: 'Complete a custom diagnosis using advanced OptGPT-4.0 for better understanding.',
-              icon: Icons.psychology_rounded,
-              color: Colors.red,
-              onTap: () {
-                setState(() {
-                  _flowSelected = true;
-                });
-                _addWelcomeMessage();
-              },
-            ),
-          ],
+                  );
+                },
+              ),
+              const SizedBox(height: 16), // Reduced from 24
+              _buildOptionCard(
+                title: 'AI Custom Diagnosis',
+                description: 'Complete a custom diagnosis using advanced OptGPT-4.0 for better understanding.',
+                icon: Icons.psychology_rounded,
+                color: Colors.red,
+                onTap: () {
+                  setState(() {
+                    _flowSelected = true;
+                  });
+                  _addWelcomeMessage();
+                },
+              ),
+              const SizedBox(height: 32), // Extra padding for safe scrolling
+            ],
+          ),
         ),
       ),
     );
