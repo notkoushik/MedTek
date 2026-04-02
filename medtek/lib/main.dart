@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'src/auth_page.dart';
 import 'src/patient_dashboard.dart';
@@ -19,6 +20,7 @@ import 'widgets/finding_driver_screen.dart';
 
 import 'services/api_service.dart';
 import 'services/session_service.dart';
+import 'config/env_config.dart';
 
 
 class ThemeNotifier extends ChangeNotifier {
@@ -83,11 +85,11 @@ class ThemeNotifier extends ChangeNotifier {
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Load environment variables from .env file
+  await dotenv.load(fileName: ".env");
 
-  // Mapbox access token. [web:54][web:47]
-  MapboxOptions.setAccessToken(
-    'pk.eyJ1IjoidGVjaG9wdGltYSIsImEiOiJjbWlvbDV1enkwMjl0M2Zxb3Z0aDNyeDJwIn0.iCyFbDAmBCzTvlX01QsfUw',
-  );
+  // Mapbox access token from environment config
+  MapboxOptions.setAccessToken(EnvConfig.mapboxAccessToken);
 
   final themeNotifier = await ThemeNotifier.create();
   final session = SessionService.instance;

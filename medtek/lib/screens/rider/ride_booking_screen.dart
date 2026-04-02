@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../../services/session_service.dart';
 import '../../services/auto_driver_service.dart';
 import '../../models/transport_mode.dart';
+import '../../config/env_config.dart';
 
 class RideBookingPage extends StatefulWidget {
   final double pickupLat;
@@ -287,7 +288,7 @@ class _RideBookingPageState extends State<RideBookingPage> {
     
     try {
       // Fetch route from Mapbox Directions API
-      final accessToken = 'pk.eyJ1Ijoic3Jpa2FrcyIsImEiOiJjbTU5ZHBqZ2QxdGVrMnFvaGc3MXRlZjV1In0.1WWDNzjyDZ3maqSS2qXWLQ';
+      final accessToken = EnvConfig.mapboxAccessToken;
       final url = 'https://api.mapbox.com/directions/v5/mapbox/driving/'
           '${widget.pickupLng},${widget.pickupLat};'
           '${widget.dropoffLng},${widget.dropoffLat}'

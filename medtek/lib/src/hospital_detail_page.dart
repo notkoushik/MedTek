@@ -10,6 +10,7 @@ import '../services/api_service.dart';
 import 'appointment_booking_page.dart';
 import 'doctor_detail_page.dart';
 import '../screens/rider/ride_booking_screen.dart';
+import '../config/env_config.dart';
 
 class HospitalDetailPage extends StatefulWidget {
   final String hospitalId;
@@ -194,10 +195,10 @@ class _HospitalDetailPageState extends State<HospitalDetailPage> {
   // Draw a soft, clean route line from user to hospital
   Future<void> _addRouteLine(double hospitalLat, double hospitalLng) async {
     if (_mapboxMap == null || _userPosition == null) return;
-    
+
     try {
       // Fetch route from Mapbox Directions API
-      final accessToken = 'pk.eyJ1Ijoic3Jpa2FrcyIsImEiOiJjbTU5ZHBqZ2QxdGVrMnFvaGc3MXRlZjV1In0.1WWDNzjyDZ3maqSS2qXWLQ';
+      final accessToken = EnvConfig.mapboxAccessToken;
       final url = 'https://api.mapbox.com/directions/v5/mapbox/driving/'
           '${_userPosition!.longitude},${_userPosition!.latitude};'
           '$hospitalLng,$hospitalLat'

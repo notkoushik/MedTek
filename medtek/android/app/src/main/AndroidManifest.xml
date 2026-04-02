@@ -16,7 +16,7 @@
 
         <meta-data
             android:name="com.mapbox.token"
-            android:value="pk.eyJ1IjoidGVjaG9wdGltYSIsImEiOiJjbWlvbDV1enkwMjl0M2Zxb3Z0aDNyeDJwIn0.iCyFbDAmBCzTvlX01QsfUw" />
+            android:value="${MAPBOX_TOKEN}" />
 
         <activity
             android:name=".MainActivity"

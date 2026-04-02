@@ -13,6 +13,7 @@ import '../services/session_service.dart';
 import '../services/location_service.dart';
 import '../screens/rider/ride_booking_screen.dart';
 import 'package:geocoding/geocoding.dart';
+import '../config/env_config.dart';
 
 class BookAppointmentPage extends StatefulWidget {
   final Map<String, dynamic> doctor;   // must contain doctorId, userId, name, specialization
@@ -434,12 +435,12 @@ class _BookAppointmentPageState extends State<BookAppointmentPage> {
   // Draw a soft, clean route line from user to hospital
   Future<void> _drawRouteLine(double userLat, double userLng, double hospLat, double hospLng) async {
     if (_map == null) return;
-    
+
     debugPrint('🗺️ Drawing route from ($userLat, $userLng) to ($hospLat, $hospLng)');
-    
+
     try {
       // Fetch route from Mapbox Directions API
-      final accessToken = 'pk.eyJ1Ijoic3Jpa2FrcyIsImEiOiJjbTU5ZHBqZ2QxdGVrMnFvaGc3MXRlZjV1In0.1WWDNzjyDZ3maqSS2qXWLQ';
+      final accessToken = EnvConfig.mapboxAccessToken;
       final url = 'https://api.mapbox.com/directions/v5/mapbox/driving/'
           '$userLng,$userLat;'
           '$hospLng,$hospLat'
