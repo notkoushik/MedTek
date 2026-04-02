@@ -1,0 +1,703 @@
+# MedTek — Complete Project Analysis & Walkthrough
+
+## 1. What is MedTek?
+
+**MedTek** is a full-stack **AI-powered medical ecosystem** application built with **Flutter** (frontend) and **Node.js/Express** (backend), backed by a **PostgreSQL** database. It connects **patients**, **doctors**, **lab assistants**, and **drivers** into a unified healthcare platform with features including:
+
+- AI-powered medical triage (Gemini + custom Ollama/OptGPT models)
+- Appointment booking with map-based hospital discovery
+- Doctor verification & onboarding
+- Lab test management workflow
+- Ride booking to hospitals
+- AI pill identification & drug interaction checking
+- Medical reports management
+- Multilingual voice support (English, Hindi, Telugu, Tamil, Arabic)
+
+---
+
+## 2. Technology Stack
+
+| Layer | Technology |
+|---|---|
+| **Frontend** | Flutter (Dart), Provider state management |
+| **Backend** | Node.js, Express.js |
+| **Database** | PostgreSQL (via `pg` Pool) |
+| **AI — Chat** | Google Gemini 2.5 Flash (via `@google/generative-ai`) |
+| **AI — Triage** | Ollama running OptGPT-4:latest (local LLM) |
+| **AI — Vision** | Gemini 2.5 Flash (pill identification) |
+| **Maps** | Mapbox Maps Flutter, Google Maps Flutter |
+| **Media** | Cloudinary (image uploads), Multer (file handling) |
+| **Auth** | JWT + bcrypt password hashing |
+| **Security** | Helmet.js, express-rate-limit, CORS |
+| **Voice** | `speech_to_text`, `flutter_tts` |
+| **HTTP Client** | Dio (Flutter), fetch API (Node.js) |
+| **Storage** | SharedPreferences (local session) |
+| **Containerization** | Docker + docker-compose |
+
+---
+
+## 3. Architecture Overview
+
+```mermaid
+graph TD
+    subgraph Flutter App
+        A[EntryGate] --> B{User Role?}
+        B -->|patient| C[PatientDashboard]
+        B -->|doctor| D[DoctorDashboard]
+        B -->|lab_assistant| E[LabDashboard]
+        B -->|not logged in| F[AuthPage]
+    end
+
+    subgraph Backend API
+        G[Express Server :4000]
+        G --> H[Auth Routes]
+        G --> I[Hospital Routes]
+        G --> J[Doctor Routes]
+        G --> K[Appointment Routes]
+        G --> L[AI Routes - Gemini/Ollama]
+        G --> M[Lab Routes]
+        G --> N[Medical Report Routes]
+        G --> O[Ride Routes]
+        G --> P[Verification Routes]
+        G --> Q[Triage Routes]
+    end
+
+    subgraph External Services
+        R[Google Gemini API]
+        S[Ollama - OptGPT-4]
+        T[Mapbox API]
+        U[Cloudinary CDN]
+        V[PostgreSQL DB]
+    end
+
+    C --> G
+    D --> G
+    E --> G
+    L --> R
+    L --> S
+    G --> V
+```
+
+---
+
+## 4. Database Schema
+
+The database uses **8 sequential SQL migrations**:
+
+### Core Tables
+
+| Table | Purpose | Key Columns |
+|---|---|---|
+| `users` | All user accounts | [id](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/services/api_service.dart#662-669), `name`, `email`, `password_hash`, `role`, `profile_picture`, `assigned_hospital_id` |
+| `hospitals` | Hospital registry | [id](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/services/api_service.dart#662-669), `name`, `address`, `city`, `latitude`, `longitude`, `phone` |
+| `doctors` | Doctor profiles (linked to users) | `user_id`, `hospital_id`, `specialization`, `experience_years`, `about`, `verified`, `rating`, `nmc_number`, `verification_points`, `verification_details` |
+| `appointments` | Patient-doctor appointments | `user_id`, `doctor_id`, `hospital_id`, `status`, `scheduled_at` |
+| `medical_reports` | Consultation records + lab orders | `doctor_id`, `patient_id`, `appointment_id`, `diagnosis`, `prescription`, `lab_tests`, `lab_tests_json`, `lab_tests_count`, `report_status` |
+| `rides` | Transport bookings | `rider_id`, `driver_id`, `pickup_lat/lng`, `drop_lat/lng`, `distance_km`, `estimated_fare`, `status`, [pin](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/triage_page.dart#1054-1123) |
+| `doctor_reviews` | Patient reviews of doctors | `doctor_id`, `patient_name`, `rating` (1-5), `comment` |
+| `hospital_doctors` | Many-to-many link | `user_id`, `hospital_id` |
+
+### User Roles
+- `patient` — End users seeking medical care
+- `doctor` — Medical practitioners
+- `lab_assistant` — Hospital lab staff
+- `driver` — Transport service providers
+- `admin` — System administrators
+
+---
+
+## 5. Complete File-by-File Analysis
+
+### 5.1 Flutter Frontend — `lib/`
+
+---
+
+#### [main.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/main.dart) — App Entry Point (265 lines)
+
+**What it does:**
+- Initializes Flutter bindings, Mapbox access token, and theme preferences
+- Sets up `MultiProvider` with 4 providers: [ThemeNotifier](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/main.dart#24-82), `RideProvider`, `LocationProvider`, [SessionService](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/services/session_service.dart#8-124)
+- Contains [ThemeNotifier](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/main.dart#24-82) class for dark/light/system theme persistence via `SharedPreferences`
+- [EntryGate](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/main.dart#189-195) widget checks session token → calls `/users/me` → routes by role:
+  - `doctor` → [DoctorDashboard](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/doctor_dashboard.dart#14-20)
+  - `lab_assistant` → [LabDashboard](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/lab_dashboard.dart#6-12)
+  - Default → [PatientDashboard](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/patient_dashboard.dart#15-21)
+  - No token → [AuthPage](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/auth_page.dart#15-21)
+- Defines named routes: `/login`, `/home`, `/lab-dashboard`, `/ride-booking`, `/finding-driver`, `/ride-tracking`, `/ride-success`, `/activities`
+
+---
+
+#### Services (`lib/services/`) — 9 files
+
+##### [api_service.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/services/api_service.dart) — Central API Client (1,114 lines)
+
+**Singleton pattern** with Dio HTTP client. Every API call the app makes goes through this file. Key method groups:
+
+| Category | Methods | What They Do |
+|---|---|---|
+| **Auth** | `login()`, `register()`, `getMe()` | Authentication & session |
+| **Profile** | `uploadProfilePicture()`, `updateUserProfile()`, `updateDoctorProfile()`, `getPatientProfile()` | User profile CRUD |
+| **Password** | `requestPasswordReset()`, `verifyResetToken()`, `resetPassword()` | 3-step password reset flow |
+| **Hospitals** | `getHospitals()`, `searchHospitals()`, `getHospitalById()`, `getNearbyHospitals()`, `getLiveNearbyHospitals()` | Hospital discovery |
+| **Doctors** | `getDoctorsForHospital()`, `getDoctorSummary()`, `searchDoctors()`, `getTrendingDoctors()`, `getDoctorReviews()` | Doctor search & info |
+| **Appointments** | `createAppointment()`, `getDoctorAppointments()`, `getPendingBookings()`, `updateAppointmentStatus()` | Booking workflow |
+| **Medical Reports** | `getMyMedicalReports()`, `createMedicalReport()`, `updateLabTestStatus()`, `completeConsultation()` | Report & lab management |
+| **Lab** | `getLabPendingTests()`, `labCollectSample()`, `labCompleteTest()`, `getLabStats()` | Lab assistant operations |
+| **Rides** | `createRide()`, `getRide()`, `getMyRides()`, `assignDriver()`, `findNearbyDrivers()`, `updateRideStatus()`, `verifyRidePin()` | Transport management |
+| **AI** | `sendChatMessage()`, `sendChatMessageOllama()`, `checkPillSafety()` | AI triage & pill ID |
+| **Triage** | `sendTriageResult()`, `saveTriageReport()` | Triage report persistence |
+| **Verification** | `getVerificationStatus()`, `submitDoctorVerification()` | Doctor credential verification |
+| **Activities** | `getActivities()`, `getPatientActivities()` | Activity timeline |
+| **Config** | `loadBaseUrl()`, `updateBaseUrl()` | Dynamic server IP configuration |
+
+##### [session_service.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/services/session_service.dart) — Session Management (124 lines)
+
+- Singleton `ChangeNotifier` for reactive session state
+- Persists JWT token + user JSON to `SharedPreferences`
+- Methods: `init()`, `saveSession()`, `updateUser()`, `clear()`, `signOut()`, `fetchMe()`, `getToken()`
+- Used by Dio interceptor to auto-attach Bearer token to all requests
+
+##### [maps_service.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/services/maps_service.dart) — Maps Utilities (10,618 bytes)
+
+- Google Maps & Mapbox integration helpers
+- Route polyline decoding, distance/duration calculations
+
+##### [location_service.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/services/location_service.dart) — GPS Location (2,676 bytes)
+
+- Uses `geolocator` for current device position
+- Permission handling for location services
+
+##### [ride_service.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/services/ride_service.dart) — Ride Booking Logic (4,346 bytes)
+
+- Manages ride lifecycle (request → accept → arrived → in_progress → completed)
+
+##### [ollama_service.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/services/ollama_service.dart) — Ollama API Client (6,117 bytes)
+
+- Direct Ollama API integration for local LLM chat
+- Used as an alternative to Gemini for offline/custom model triage
+
+##### [cloudinary_service.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/services/cloudinary_service.dart) — Image Upload (1,131 bytes)
+
+- Handles image uploads to Cloudinary CDN for medical reports/profile pictures
+
+##### [auto_driver_service.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/services/auto_driver_service.dart) — Auto Driver Simulation (2,822 bytes)
+
+- Simulates driver matching/assignment for demo purposes
+
+##### [storage_service.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/services/storage_service.dart) — Local Storage (840 bytes)
+
+- Simple SharedPreferences wrapper for small data persistence
+
+---
+
+#### Screens & Pages (`lib/src/`) — 28 files
+
+##### [auth_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/auth_page.dart) — Login & Registration (897 lines)
+
+- Dual-mode UI: **Login** vs **Register** toggle
+- Registration supports role selection: Patient, Doctor, Lab Assistant
+- Backend IP configuration dialog (for dev/testing)
+- Post-login routing by role with onboarding guards
+- Animated form with glassmorphic styling
+- Forgot password link → `ForgotPasswordScreen`
+
+##### [patient_dashboard.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/patient_dashboard.dart) — Patient Home (1,006 lines)
+
+The primary patient interface with bottom navigation (5 tabs):
+1. **Home** — Welcome banner, trending doctors carousel, nearby hospitals list
+2. **Triage** → `TriagePage` (AI chat)
+3. **Search** → Hospital search delegate
+4. **Profile** → `PatientProfilePage`
+
+Sub-widgets: `_DoctorCard` (with verified badge), `_HospitalCard`, `HospitalSearchDelegate`
+
+##### [doctor_dashboard.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/doctor_dashboard.dart) — Doctor Home (898 lines)
+
+- Bottom navigation with: Dashboard, Patients, Schedule, Profile
+- `DoctorPatientDashboard` — Stats overview (total patients, today's, pending)
+- `_DoctorHeaderCard` — Doctor name, specialization, hospital
+- `_RecentPatientsList` — Today's appointments with status
+- `_PendingBookingsNotification` — Accept/decline incoming bookings
+- `_StatCard` — Animated metric cards
+- Quick action buttons: View All Patients, Schedule, Monitor
+
+##### [lab_dashboard.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/lab_dashboard.dart) — Lab Assistant Home (391 lines)
+
+- Stats row: Pending tests, Samples collected, Completed today
+- List of pending lab tests with action buttons:
+  - **Collect Sample** (pending → sample_collected)
+  - **Mark Complete** (sample_collected → done)
+- Auto-refreshes after actions
+- Logout functionality
+
+##### [triage_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/triage_page.dart) — AI Triage Assistant (1,348 lines)
+
+**The most complex page.** Features:
+- **Dual AI Backend**: Switches between Google Gemini and Ollama/OptGPT
+- **Multilingual Support**: English, Hindi, Telugu, Tamil, Arabic — affects both AI prompts and speech engines
+- **Speech-to-Text**: Records patient symptoms via microphone
+- **Text-to-Speech**: Reads AI responses aloud in selected language
+- **Chat Interface**: Message bubbles with timestamps, typing indicators
+- **Quick Suggestions**: Pre-built symptom shortcuts (headache, fever, etc.)
+- **Report Generation**: After conversation, generates a triage report that can be saved
+- **Hospital Flow**: After triage → recommend hospital selection → book appointment
+- **Language Selector**: Horizontal chip bar to switch languages mid-conversation
+
+##### [appointment_booking_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/appointment_booking_page.dart) — Book Appointment (908 lines)
+
+- Mapbox map showing hospital location with route line from user's location
+- Hospital & doctor selection cards
+- Date picker and time slot picker (scroll-wheel style)
+- Ride booking option to hospital
+- Duplicate appointment detection (409 conflict handling)
+- Geocoding for location names
+
+##### [hospital_detail_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/hospital_detail_page.dart) — Hospital Details (876 lines)
+
+- Full hospital info with Mapbox map embed
+- Route line from user location to hospital
+- Distance calculation (Haversine formula)
+- List of doctors at the hospital
+- "Book Ride" and "Book Appointment" CTAs
+- Marker annotations on map
+
+##### [patient_reports_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/patient_reports_page.dart) — Medical Reports (1,209 lines)
+
+Two parts:
+1. **PatientReportsPage** — List view with summary cards (total reports, pending, completed), color-coded report cards
+2. **PatientReportDetailPage** — Full report detail with:
+   - Diagnosis, prescription, lab test tracking
+   - Lab test checklist with status (pending/sample_collected/done)
+   - Doctor can mark consultation complete
+   - Section cards with SVG icons
+
+##### [profile_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/profile_page.dart) — Patient Profile (902 lines)
+
+- Profile picture upload via camera/gallery
+- Editable fields: name, age, blood type, allergies, conditions, emergency contact
+- Activity history section
+- Settings section with theme toggle
+- Insurance & reference management
+- Sign out
+
+##### [doctor_profile_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/doctor_profile_page.dart) — Doctor Profile (19,292 bytes)
+
+- Specialization, experience years, about text editing
+- Hospital selection & management
+- Profile picture upload
+- Verification status display
+
+##### [doctor_detail_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/doctor_detail_page.dart) — Doctor Info (15,721 bytes)
+
+- Public-facing doctor profile for patients
+- Rating, reviews, specialization, experience
+- "Book Appointment" CTA
+
+##### [doctor_schedule_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/doctor_schedule_page.dart) — Schedule View (19,912 bytes)
+
+- Calendar-based appointment view for doctors
+- Daily/weekly schedule management
+
+##### [patient_detail_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/patient_detail_page.dart) — Patient Detail for Doctor (16,181 bytes)
+
+- Doctor's view of a specific patient's appointment
+- Create/edit medical reports
+- Order lab tests
+- View patient history
+
+##### [patient_monitor_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/patient_monitor_page.dart) — Patient Monitoring (17,531 bytes)
+
+- Real-time patient status tracking for doctors
+- Lab test progress monitoring
+
+##### [patients_list_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/patients_list_page.dart) — All Patients (8,474 bytes)
+
+- Tabbed list: Active, Pending, Completed patients
+- Filtered views with status-based coloring
+
+##### [doctor_verification_screen.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/doctor_verification_screen.dart) — Verification (321 lines)
+
+Multi-step verification:
+1. **NMC Number Verification** — Enter medical council registration
+2. **Certificate Upload** — Pick & OCR-process medical certificate
+3. **Selfie + Liveness Check** — Camera selfie with liveness detection
+4. Points-based scoring system
+
+##### [doctor_onboarding_guard.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/doctor_onboarding_guard.dart) — Onboarding (3,138 bytes)
+
+- Checks if doctor has selected hospital → forces selection before dashboard access
+
+##### [ai_pill_detection_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/ai_pill_detection_page.dart) — Pill ID (13,769 bytes)
+
+- Camera/gallery image capture of pills
+- AI-powered identification via Gemini Vision
+- Drug interaction checking against current medications
+- Safety classification (safe/unsafe) with confidence scores
+- Detailed interaction warnings with severity levels
+
+##### [hospital_selection_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/hospital_selection_page.dart) — Hospital Selection (23,789 bytes)
+
+- Post-triage hospital recommendation
+- Location-based filtering
+- Integration with appointment booking flow
+
+##### [select_hospital_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/select_hospital_page.dart) — Hospital Picker (30,561 bytes)
+
+- Doctor/lab assistant hospital assignment page
+- Search and select from all registered hospitals
+
+##### [select_doctor_page.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/select_doctor_page.dart) — Doctor Picker (9,543 bytes)
+
+- Select a doctor from a specific hospital for appointments
+
+##### [forgot_password_screen.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/forgot_password_screen.dart) — Password Reset (11,620 bytes)
+
+- 3-step flow: Enter email → Verify code → Set new password
+
+##### [nearest_hospital.dart](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/lib/src/nearest_hospital.dart) — Nearby Discovery (6,530 bytes)
+
+- GPS-based nearest hospital finder
+
+##### Other pages: `schedule_page.dart` (12,832 bytes), `doctor_details_dialog.dart` (8,355 bytes), `doctor_location_page.dart` (11,345 bytes), `patient_profile_setup_page.dart` (9,043 bytes), `settings_page.dart` (2,246 bytes)
+
+---
+
+#### Models (`lib/models/`) — 6 files
+
+| File | Purpose |
+|---|---|
+| `user_model.dart` | User data model with role, profile picture |
+| `hospital.dart` | Hospital model with `fromJson()` |
+| `ride_model.dart` | Ride entity with full lifecycle states |
+| `driver_model.dart` | Driver profile model |
+| `transport_mode.dart` | Transport type enum/model |
+| `vehicle_type.dart` | Vehicle classification |
+
+#### Providers (`lib/providers/`) — 2 files
+
+| File | Purpose |
+|---|---|
+| `ride_provider.dart` | `ChangeNotifier` for ride booking state management |
+| `location_provider.dart` | `ChangeNotifier` for GPS location tracking |
+
+#### Widgets (`lib/widgets/`) — 3 files
+
+| File | Purpose |
+|---|---|
+| `map_widget.dart` (14,546 bytes) | Reusable Mapbox map widget with markers, routes |
+| `finding_driver_screen.dart` (3,921 bytes) | Animated "finding driver" loading screen |
+| `theme_selector.dart` (4,849 bytes) | Theme mode picker (light/dark/system) |
+
+#### Theme (`lib/theme/`) — 2 files
+
+| File | Purpose |
+|---|---|
+| `app_theme.dart` (20,653 bytes) | Complete Material 3 theme definition with light & dark variants |
+| `theme_notifier.dart` (1,580 bytes) | Theme mode persistence logic |
+
+#### Pages (`lib/pages/`) — 1 file
+
+| File | Purpose |
+|---|---|
+| `speak.dart` (17,313 bytes) | Voice interaction page with TTS/STT integration |
+
+---
+
+### 5.2 Backend — `backend/`
+
+---
+
+#### [index.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/index.js) — Server Entry Point (395 lines)
+
+- Health check endpoint (`/`)
+- Middleware stack: Helmet, CORS, rate limiting (production only), JSON body parsing (50MB limit)
+- Inline auth routes: `POST /auth/register`, `POST /auth/login`, `GET /users/me`
+- Registration creates user + doctor record (if doctor role)
+- Login returns JWT (7-day expiry) + hospital data for doctors
+- Mounts 14 route modules
+
+#### [db.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/db.js) — Database Connection (11 lines)
+
+- PostgreSQL connection pool via `DATABASE_URL` env var
+- Optional SSL support via `DB_SSL` env var
+
+#### Routes (`backend/routes/`) — 16 files
+
+##### [ai.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/ai.js) — AI Endpoints (358 lines)
+
+Three main endpoints:
+
+| Endpoint | Model | Purpose |
+|---|---|---|
+| `POST /ai/chat` | Gemini 2.5 Flash | Medical triage chat with patient profile context |
+| `POST /ai/identify-pill` | Gemini 2.5 Flash (Vision) | Pill image analysis + drug interaction checking |
+| `POST /ai/chat-ollama` | OptGPT-4:latest (Ollama) | Offline triage with multilingual support |
+| `GET /ai/ollama-info` | — | Ollama server & model status |
+
+Key features:
+- Retry with exponential backoff (3 retries)
+- Personalized system prompts with patient profile
+- Pharmacist agent for pill safety (JSON output)
+- Multi-language support: EN, HI, TE, TA, AR
+
+##### [lab.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/lab.js) — Lab Management (310 lines)
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /lab/pending-tests` | Get all pending lab tests for assigned hospital |
+| `PATCH /lab/test/:reportId/collect-sample` | Mark sample collected |
+| `PATCH /lab/test/:reportId/complete` | Mark test done (checks sample first) |
+| `GET /lab/stats` | Dashboard stats (pending, collected, completed today) |
+
+Workflow: `pending → sample_collected → done`. When all tests done → report status = `completed`, appointment status = `ready_for_review`.
+
+##### [appointments.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/appointments.js) — Appointments (8,262 bytes)
+
+- CRUD for appointments
+- Pending bookings for doctors
+- Status management (pending → confirmed → in_progress → completed)
+- Triage result attachment
+- Duplicate detection
+
+##### [doctors.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/doctors.js) — Doctor APIs (14,486 bytes)
+
+- Hospital selection for doctors
+- Profile updates (specialization, experience, about)
+- Trending doctors algorithm
+- Doctor search
+- Summary statistics
+- Recent reports
+
+##### [hospitals.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/hospitals.js) — Hospital APIs (4,670 bytes)
+
+- CRUD hospitals
+- Search with location proximity
+- Nearby hospitals (GPS-based)
+- Doctors by hospital
+
+##### [medical-reports.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/medical-reports.js) — Medical Reports (9,855 bytes)
+
+- Create reports with diagnosis, prescription, lab tests
+- Lab test status tracking via JSONB
+- Report completion
+- Patient's report history
+
+##### [verification.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/verification.js) & [verification_v2.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/verification_v2.js) — Doctor Verification (17,716 bytes combined)
+
+- NMC number verification
+- OCR certificate processing
+- Selfie liveness detection
+- Points-based scoring system
+- Document upload with Multer
+
+##### [rides.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/rides.js) — Rides (6,660 bytes)
+
+- Ride creation with GPS coordinates
+- Driver assignment
+- PIN verification for pickup
+- Status tracking (requested → accepted → arrived → in_progress → completed)
+- Ride history
+
+##### [users.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/users.js) — User Management (9,790 bytes)
+
+- Profile CRUD
+- Profile picture upload (Multer)
+- Hospital assignment (for lab assistants)
+- Patient profile data
+
+##### [password-reset.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/password-reset.js) — Password Reset (5,223 bytes)
+
+- Request reset code
+- Verify code
+- Reset password
+
+##### [triage.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/triage.js) — Triage Save (55 lines)
+
+- Saves triage conversation + report as JSON files to `uploads/triage_reports/`
+
+##### [activities.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/activities.js), [drivers.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/drivers.js), [auth.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/auth.js), [doctor-location.js](file:///c:/Users/botch/New_app/MedTek/AI_Flutter_Applications-medtek/medtek/backend/routes/doctor-location.js)
+
+Minor supporting route files for activities timeline, driver management, auth helpers, and doctor location tracking.
+
+---
+
+## 6. Application Workflows — How Users Use MedTek
+
+### 6.1 Patient Workflow
+
+```mermaid
+flowchart TD
+    A[Open App] --> B{Logged In?}
+    B -->|No| C[Register as Patient]
+    C --> D[Patient Profile Setup]
+    B -->|Yes| E[Patient Dashboard]
+    D --> E
+    
+    E --> F[Browse Trending Doctors]
+    E --> G[Search Nearby Hospitals]
+    E --> H[AI Triage Chat]
+    E --> I[View Medical Reports]
+    E --> J[Profile & Settings]
+    E --> K[AI Pill Detection]
+    
+    H --> L[Describe Symptoms]
+    L --> M[AI Recommends Specialist]
+    M --> N[Select Hospital]
+    N --> O[Select Doctor]
+    O --> P[Pick Date & Time]
+    P --> Q[Confirm Booking]
+    Q --> R[Book Ride to Hospital]
+    
+    G --> S[Hospital Detail Page]
+    S --> T[View Doctors at Hospital]
+    T --> O
+    S --> R
+    
+    I --> U[View Report Detail]
+    U --> V[Track Lab Test Status]
+```
+
+**Step-by-step:**
+
+1. **Registration**: Patient creates account → sets up profile (name, age, blood type, allergies, conditions)
+2. **Triage**: Opens AI chat → speaks/types symptoms in their language → AI asks clarifying questions → recommends specialist type
+3. **Hospital Discovery**: After triage, selects nearby hospital from map view → sees distance, address, available doctors
+4. **Appointment Booking**: Picks doctor → selects date/time → confirms → backend creates appointment record
+5. **Ride Booking**: Optionally books ride to hospital → sees route on Mapbox map → driver assigned → PIN verified at pickup
+6. **Medical Reports**: After consultation, views diagnosis, prescriptions, lab test orders and their real-time status
+7. **Pill Detection**: Takes photo of medication → AI identifies pill → checks drug interactions with current meds
+
+---
+
+### 6.2 Doctor Workflow
+
+```mermaid
+flowchart TD
+    A[Register as Doctor] --> B[Hospital Selection]
+    B --> C[Verification Screen]
+    C --> D[NMC Number Check]
+    C --> E[Certificate Upload + OCR]
+    C --> F[Selfie + Liveness]
+    D & E & F --> G[Verified Status]
+    G --> H[Doctor Dashboard]
+    
+    H --> I[View Pending Bookings]
+    I --> J[Accept / Decline]
+    J -->|Accept| K[Appointment Confirmed]
+    
+    H --> L[Today's Patients]
+    L --> M[View Patient Detail]
+    M --> N[Write Diagnosis]
+    M --> O[Write Prescription]
+    M --> P[Order Lab Tests]
+    P --> Q[Lab Tests Sent to Lab Dashboard]
+    
+    H --> R[Schedule Management]
+    H --> S[Profile Management]
+    H --> T[Patient Monitor]
+```
+
+1. **Onboarding**: Register → select hospital → complete verification (NMC, certificate OCR, selfie)
+2. **Dashboard**: See stats (total patients, today's, pending), recent patient list, pending booking notifications
+3. **Booking Management**: Accept/decline incoming patient appointments
+4. **Consultation**: Click patient → view history → write diagnosis + prescription + order lab tests
+5. **Lab Monitoring**: Track lab test progress in `patient_monitor_page.dart`
+6. **Profile**: Update specialization, experience, about, profile picture
+
+---
+
+### 6.3 Lab Assistant Workflow
+
+```mermaid
+flowchart TD
+    A[Register as Lab Assistant] --> B[Assign to Hospital]
+    B --> C[Lab Dashboard]
+    
+    C --> D[View Stats]
+    D --> E[Pending Tests Count]
+    D --> F[Samples Collected Count]
+    D --> G[Completed Today Count]
+    
+    C --> H[Pending Tests List]
+    H --> I[Collect Sample]
+    I --> J[Status: sample_collected]
+    J --> K[Mark Complete]
+    K --> L[Status: done]
+    L --> M{All Tests Done?}
+    M -->|Yes| N[Report Status = completed]
+    N --> O[Appointment = ready_for_review]
+    M -->|No| H
+```
+
+1. **Assignment**: After registration, assigned to specific hospital
+2. **Dashboard**: View pending/collected/completed test counts
+3. **Process Tests**: For each test — collect sample → run test → mark complete
+4. **Auto-completion**: When all tests for a report are done, report auto-completes and appointment marked as ready for doctor review
+
+---
+
+### 6.4 Ride Booking Workflow
+
+```mermaid
+flowchart LR
+    A[Patient Selects Hospital] --> B[Book Ride]
+    B --> C[Select Pickup/Dropoff]
+    C --> D[Ride Created]
+    D --> E[Finding Driver...]
+    E --> F[Driver Assigned]
+    F --> G[Driver En Route]
+    G --> H[Driver Arrived]
+    H --> I[Verify PIN]
+    I --> J[Ride In Progress]
+    J --> K[Ride Completed]
+    K --> L[Success Page]
+```
+
+---
+
+## 7. Key Technical Highlights
+
+### AI Integration (Dual-Model Architecture)
+- **Gemini 2.5 Flash**: Primary AI for English triage and pill identification (Vision API)
+- **OptGPT-4 via Ollama**: Custom-trained local model for multilingual triage (runs on local network)
+- Retry with exponential backoff for rate limits (429/503)
+- Patient profile context injection into all AI prompts
+
+### Security
+- **JWT authentication** with 7-day token expiry
+- **bcrypt** password hashing (10 salt rounds)
+- **Helmet.js** security headers
+- **Rate limiting** in production (100 req/15min)
+- **Auth middleware** protects all sensitive routes
+
+### Multilingual Voice Support
+- 5 languages: English, Hindi, Telugu, Tamil, Arabic
+- Each language has configured: STT locale, TTS language, AI prompt language instruction
+- Real-time speech recognition with visual feedback
+
+### Doctor Verification System
+- Multi-factor verification: NMC number + Certificate OCR + Selfie liveness
+- Points-based scoring stored in JSONB
+- Verification badge displayed throughout the app
+
+### Lab Test Lifecycle
+- Uses PostgreSQL JSONB (`lab_tests_json`) for flexible test tracking
+- 3-stage workflow: `pending → sample_collected → done`
+- Atomic updates with automatic report/appointment status propagation
+
+---
+
+## 8. Project Statistics
+
+| Metric | Count |
+|---|---|
+| Total Flutter source files | ~45+ |
+| Total backend route files | 16 |
+| Total SQL migrations | 8 |
+| Total lines of code (estimated) | ~15,000+ |
+| API endpoints | ~50+ |
+| Database tables | 8 |
+| User roles | 5 |
+| AI models integrated | 2 (Gemini + OptGPT) |
+| Languages supported | 5 |
+| Map providers | 2 (Mapbox + Google Maps) |

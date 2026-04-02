@@ -1069,7 +1069,27 @@ class ApiService {
     }
   }
 
+  // ---------- DOCTOR LOCATION ----------
 
+  Future<void> updateDoctorLocation({
+    required double latitude,
+    required double longitude,
+    String? address,
+  }) async {
+    try {
+      await _dio.patch(
+        '/doctors/location',
+        data: {
+          'latitude': latitude,
+          'longitude': longitude,
+          if (address != null) 'address': address,
+        },
+      );
+    } catch (e) {
+      print('Error updating doctor location: $e');
+      rethrow;
+    }
+  }
 
   // ---------- PILL IDENTIFICATION (Gemini Vision) ----------
 
